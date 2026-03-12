@@ -16,6 +16,13 @@ COMMAND=$1
 JOB=${2:-""}
 
 case "$COMMAND" in
+    install)
+        sudo /opt/automation/bin/install-units.sh
+        ;;
+    refresh)
+        sudo systemctl daemon-reload
+        echo "Configurazioni ricaricate."
+        ;;
     list)
         echo "Configured jobs:"
         for j in "${JOBS[@]}"; do echo " - $j"; done
