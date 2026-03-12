@@ -26,7 +26,11 @@ for UNIT in $UNITS; do
     echo "    - Elaborazione: $UNIT"
 
     # Crea il link simbolico (forza se esiste già)
-    ln -sf "${SOURCE_DIR}/${UNIT}" "${TARGET_DIR}/${UNIT}"
+    #ln -sf "${SOURCE_DIR}/${UNIT}" "${TARGET_DIR}/${UNIT}"
+
+    # Invece di un semplice ln -s, facciamo questo:
+    sed "s|{{BASE_DIR}}|${BASE_DIR}|g" "${SOURCE_DIR}/${UNIT}" > "/tmp/${UNIT}"
+    mv "/tmp/${UNIT}" "${TARGET_DIR}/${UNIT}"
 done
 
 # 2. Ricarica systemd per vedere i nuovi link

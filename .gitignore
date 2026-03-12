@@ -10,6 +10,9 @@ jobs/*/data/*
 !jobs/*/current/.gitkeep
 !jobs/*/data/.gitkeep
 
+# Ignore nested .git folders
+**.git/
+
 # Ignore runtime state and uv artifacts
 state/*
 .python-version

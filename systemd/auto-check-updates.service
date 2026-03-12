@@ -7,8 +7,8 @@ PartOf=automation.target
 Type=oneshot
 User=automation-user
 Group=automation-user
-WorkingDirectory=/opt/automation
-ExecStart=/opt/automation/bin/run-check-updates.sh
+WorkingDirectory={{BASE_DIR}}
+ExecStart={{BASE_DIR}}/bin/run-check-updates.sh
 # Ensure systemd knows where uv is if not in standard path
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 

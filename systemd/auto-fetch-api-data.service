@@ -7,9 +7,9 @@ PartOf=automation.target
 Type=oneshot
 User=automation-user
 Group=automation-user
-WorkingDirectory=/opt/automation
+WorkingDirectory={{BASE_DIR}}
 # Punta al nuovo script che abbiamo creato
-ExecStart=/opt/automation/bin/run-youtube-metadata.sh
+ExecStart={{BASE_DIR}}/bin/run-youtube-metadata.sh
 # Assicurati che l'ambiente abbia uv nel PATH
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/automation-user/.local/bin
 
