@@ -1,0 +1,21 @@
+# Ignore secrets
+config/*.env
+config/jobs/*.env
+!config/*.env.example
+!config/jobs/*.env.example
+
+# Ignore job-specific operational payloads and data
+jobs/*/current/*
+jobs/*/data/*
+!jobs/*/current/.gitkeep
+!jobs/*/data/.gitkeep
+
+# Ignore runtime state and uv artifacts
+state/*
+.python-version
+.venv/
+__pycache__/
+*.pyc
+
+# System logs
+logs/*

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check Python Package Updates
+After=network.target
+PartOf=automation.target
+
+[Service]
+Type=oneshot
+User=automation-user
+Group=automation-user
+WorkingDirectory=/opt/automation
+ExecStart=/opt/automation/bin/run-check-updates.sh
+# Ensure systemd knows where uv is if not in standard path
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=automation.target

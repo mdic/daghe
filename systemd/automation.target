@@ -1,0 +1,6 @@
+[Unit]
+Description=Automation Job Suite Orchestration
+StopWhenUnneeded=yes
+
+[Install]
+WantedBy=multi-user.target
