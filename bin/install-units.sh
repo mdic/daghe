@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Configurazione
-SOURCE_DIR="/opt/automation/systemd"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../config/global.env"
+
+SOURCE_DIR="${BASE_DIR}/systemd"
 TARGET_DIR="/etc/systemd/system"
 
 # Assicurati di essere root (o usa sudo)

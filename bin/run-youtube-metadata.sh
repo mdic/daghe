@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 1. Carica configurazioni globali
-source "/opt/automation/config/global.env"
+# Trova la cartella dove risiede questo script (bin/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 2. Definisci variabili specifiche del job
+# Carica global.env usando il percorso relativo (va indietro di uno e entra in config/)
+if [[ -f "${SCRIPT_DIR}/../config/global.env" ]]; then
+    source "${SCRIPT_DIR}/../config/global.env"
+else
+    echo "Errore: Impossibile trovare ${SCRIPT_DIR}/../config/global.env"
+    exit 1
+fi
+
+# Ora tutte le variabili (BASE_DIR, JOB_ROOT, ecc.) sono basate sul path reale
 JOB_NAME="youtube-search-metadata"
 LOCK_FILE="${STATE_DIR}/${JOB_NAME}.lock"
 JOB_ROOT="${BASE_DIR}/jobs/${JOB_NAME}"

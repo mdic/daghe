@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Carichiamo global.env per avere BASE_DIR, BIN_DIR, ecc.
+source "${SCRIPT_DIR}/../config/global.env"
+
 # Job Manager Utility
-JOBS=("check-updates" "backup-data" "fetch-api-data")
+JOBS=("check-updates" "backup-data" "fetch-api-data" "youtube-search-metadata")
 
 usage() {
-    echo "Usage: $0 {list|status|enable|disable|start|stop|logs} [job_name]"
-    echo "       $0 {enable-all|disable-all|start-all|stop-all}"
+    echo "Usage: $0 {list|status|enable|disable|start|stop|logs|install} [job_name]"
     exit 1
 }
 
@@ -17,7 +20,7 @@ JOB=${2:-""}
 
 case "$COMMAND" in
     install)
-        sudo /opt/automation/bin/install-units.sh
+        sudo "${BASE_DIR}/install-units.sh"
         ;;
     refresh)
         sudo systemctl daemon-reload

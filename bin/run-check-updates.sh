@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # 1. Setup Environment
-source "/opt/automation/config/global.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../config/global.env"
+
 JOB_NAME="check-updates"
 LOCK_FILE="${STATE_DIR}/${JOB_NAME}.lock"
 APP_DIR="${BASE_DIR}/apps/check-updates"

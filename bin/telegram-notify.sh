@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared Telegram helper
-# Usage: ./telegram-notify.sh "level" "message"
+# Rilevamento dinamico della posizione
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 LEVEL=${1:-"INFO"}
 MESSAGE=${2:-""}
 HOSTNAME=$(hostname)
 
-# Load secrets
-if [[ -f "/opt/automation/config/telegram.env" ]]; then
-    source "/opt/automation/config/telegram.env"
+# Carica i segreti usando il path dinamico
+if [[ -f "${BASE_DIR}/config/telegram.env" ]]; then
+    source "${BASE_DIR}/config/telegram.env"
 else
-    echo "Telegram config missing. Skipping notification."
+    echo "Telegram config missing at ${BASE_DIR}/config/telegram.env. Skipping."
     exit 0
 fi
 
