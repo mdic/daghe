@@ -2,8 +2,8 @@
 """
 DaGhE (Automation Orchestrator) CLI
 UK English spelling.
-Location-agnostic architecture for local testing and VPS production.
-Utilises systemd user instances with automated bus discovery and skeleton generation.
+Location-agnostic architecture with robust path sanitisation to prevent duplicated
+directory segments (e.g. /jobs/jobs/) and full module management.
 """
 
 import argparse
@@ -76,6 +76,17 @@ class DagheOrchestrator:
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
 
+    def _sanitise_module_name(self, input_name):
+        """
+        Cleans the input module name to prevent path duplication.
+        E.g. transforms 'jobs/daghe-test' or './daghe-test/' into 'daghe-test'.
+        """
+        if not input_name:
+            return ""
+        # Get only the last part of the path and strip trailing slashes
+        clean_name = Path(input_name).name
+        return clean_name
+
     def _get_clean_env(self):
         """
         Returns a copy of environment variables stripped of Python/Venv specific
@@ -104,7 +115,9 @@ class DagheOrchestrator:
         Load and parse the daghe-module.yaml for the specific module.
         Ensures the manifest is not empty to prevent NoneType crashes.
         """
-        manifest_path = JOBS_DIR / module_name / "current" / "daghe-module.yaml"
+        name = self._sanitise_module_name(module_name)
+        manifest_path = JOBS_DIR / name / "current" / "daghe-module.yaml"
+
         if not manifest_path.exists():
             logger.error(f"Manifest missing at: {manifest_path}")
             sys.exit(1)
@@ -118,11 +131,12 @@ class DagheOrchestrator:
 
     def setup_module_env(self, module_name):
         """Initialise or synchronise the uv virtual environment for a Python module."""
-        data = self._load_manifest(module_name)
+        name = self._sanitise_module_name(module_name)
+        data = self._load_manifest(name)
         if data.get("module", {}).get("type") != "python":
             return
 
-        module_cwd = JOBS_DIR / module_name / "current"
+        module_cwd = JOBS_DIR / name / "current"
         pyproject_path = module_cwd / "pyproject.toml"
 
         if not pyproject_path.exists():
@@ -131,26 +145,27 @@ class DagheOrchestrator:
             )
             return
 
-        logger.info(f"Synchronising uv environment for {module_name}...")
+        logger.info(f"Synchronising uv environment for {name}...")
         try:
             subprocess.run(
                 ["uv", "sync"], cwd=module_cwd, check=True, env=self._get_clean_env()
             )
-            logger.info(f"Environment for {module_name} synchronised successfully.")
+            logger.info(f"Environment for {name} synchronised successfully.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to synchronise environment for {module_name}: {e}")
+            logger.error(f"Failed to synchronise environment for {name}: {e}")
             sys.exit(1)
 
     def generate_configs(self, module_name):
         """Render templates into functional bash wrappers and systemd units."""
-        data = self._load_manifest(module_name)
+        name = self._sanitise_module_name(module_name)
+        data = self._load_manifest(name)
 
         proxy_section = data.get("proxy") or {}
         proxy_name = proxy_section.get("name", "")
 
         mapping = {
             "BASE_DIR": str(BASE_DIR),
-            "NAME": data["module"]["name"],
+            "NAME": name,
             "DESCRIPTION": data["module"]["description"],
             "ENTRYPOINT": data["module"]["entrypoint"],
             "PARAMS": data["module"].get("params", ""),
@@ -160,17 +175,12 @@ class DagheOrchestrator:
         }
 
         self._render(
-            "wrapper.sh.tmpl",
-            GEN_DIR / f"run-{module_name}.sh",
-            mapping,
-            is_executable=True,
+            "wrapper.sh.tmpl", GEN_DIR / f"run-{name}.sh", mapping, is_executable=True
         )
         self._render(
-            "service.tmpl", SYSTEMD_MASTER_DIR / f"auto-{module_name}.service", mapping
+            "service.tmpl", SYSTEMD_MASTER_DIR / f"auto-{name}.service", mapping
         )
-        self._render(
-            "timer.tmpl", SYSTEMD_MASTER_DIR / f"auto-{module_name}.timer", mapping
-        )
+        self._render("timer.tmpl", SYSTEMD_MASTER_DIR / f"auto-{name}.timer", mapping)
 
     def _render(self, template_source, output_path, mapping, is_executable=False):
         """
@@ -200,14 +210,15 @@ class DagheOrchestrator:
 
     def install(self, module_name):
         """Registration pipeline using systemd user instances."""
-        self.setup_module_env(module_name)
-        self.generate_configs(module_name)
+        name = self._sanitise_module_name(module_name)
+        self.setup_module_env(name)
+        self.generate_configs(name)
 
         if not self.is_production:
             logger.info("Skipping systemd installation (Testing mode).")
             return
 
-        units = [f"auto-{module_name}.service", f"auto-{module_name}.timer"]
+        units = [f"auto-{name}.service", f"auto-{name}.timer"]
         bus_env = self._get_user_bus_env()
         try:
             for unit in units:
@@ -221,22 +232,21 @@ class DagheOrchestrator:
                 ["systemctl", "--user", "daemon-reload"], check=True, env=bus_env
             )
             subprocess.run(
-                ["systemctl", "--user", "enable", "--now", f"auto-{module_name}.timer"],
+                ["systemctl", "--user", "enable", "--now", f"auto-{name}.timer"],
                 check=True,
                 env=bus_env,
             )
-            logger.info(
-                f"Module '{module_name}' installed and enabled in user session."
-            )
+            logger.info(f"Module '{name}' installed and enabled in user session.")
         except Exception as e:
-            logger.error(f"Failed to install systemd units: {e}")
+            logger.error(f"Failed to install systemd units for {name}: {e}")
 
     def create_new_module(self, module_name):
         """
         Initialises a new module skeleton using external templates.
         The Git repository is assumed to be the module root.
         """
-        if not module_name.startswith("daghe-"):
+        name = self._sanitise_module_name(module_name)
+        if not name.startswith("daghe-"):
             logger.error("Module name must start with 'daghe-' prefix.")
             sys.exit(1)
 
@@ -245,8 +255,8 @@ class DagheOrchestrator:
             sys.exit(1)
 
         # 1. Setup paths
-        package_name = module_name.replace("-", "_")
-        mod_root = JOBS_DIR / module_name  # The Git Repo Root
+        package_name = name.replace("-", "_")
+        mod_root = JOBS_DIR / name  # The Git Repo Root
         code_dir = mod_root / "current"  # The Code sub-dir
         src_dir = code_dir / "src" / package_name
         config_dir = code_dir / "config"
@@ -262,9 +272,9 @@ class DagheOrchestrator:
             (d / ".gitkeep").touch()
 
         # 2. Rendering Mapping
-        mapping = {"NAME": module_name, "PACKAGE_NAME": package_name}
+        mapping = {"NAME": name, "PACKAGE_NAME": package_name}
 
-        # 3. Render files using the versatile _render method
+        # 3. Render files
         self._render(SKELETON_DIR / ".gitignore.tmpl", mod_root / ".gitignore", mapping)
         self._render(
             SKELETON_DIR / "pyproject.toml.tmpl", code_dir / "pyproject.toml", mapping
@@ -275,27 +285,25 @@ class DagheOrchestrator:
             mapping,
         )
 
-        # Python Logic files
+        # Logic files
         (src_dir / "__init__.py").touch()
         self._render(SKELETON_DIR / "cli.py.tmpl", src_dir / "cli.py", mapping)
         self._render(SKELETON_DIR / "main.py.tmpl", src_dir / "main.py", mapping)
 
-        # Example configuration
-        (config_dir / "job.yaml.example").write_text(f"job_name: {module_name}\n")
+        # Example config
+        (config_dir / "job.yaml.example").write_text(f"job_name: {name}\n")
 
-        logger.info(f"Successfully initialised {module_name}")
-        logger.info(
-            f"Action required: initialise git in {mod_root} and customise your logic."
-        )
+        logger.info(f"Successfully initialised {name}")
 
     def upgrade_module(self, module_name):
         """Perform automated dependency upgrades via 'uv add --upgrade'."""
-        data = self._load_manifest(module_name)
+        name = self._sanitise_module_name(module_name)
+        data = self._load_manifest(name)
         packages = data.get("updates", {}).get("auto_upgrade_packages", [])
         if not packages:
             return
-        module_cwd = JOBS_DIR / module_name / "current"
-        logger.info(f"Upgrading dependencies for {module_name}...")
+        module_cwd = JOBS_DIR / name / "current"
+        logger.info(f"Upgrading dependencies for {name}...")
         env = self._get_clean_env()
         for pkg in packages:
             subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_cwd, env=env)
@@ -308,18 +316,22 @@ class DagheOrchestrator:
                 env=self._get_user_bus_env(),
             )
         else:
-            logger.info(f"Status check: BASE_DIR is {BASE_DIR}")
+            logger.info(f"Status check: BASE_DIR is {BASE_DIR}. Registered modules:")
+            for m in JOBS_DIR.iterdir():
+                if m.is_dir() and (m / "current" / "daghe-module.yaml").exists():
+                    logger.info(f" - {m.name}")
 
     def show_logs(self, module_name):
         """Helper to show both systemd journal and application log file."""
-        logger.info(f"--- Systemd Journal for {module_name} ---")
+        name = self._sanitise_module_name(module_name)
+        logger.info(f"--- Systemd Journal for {name} ---")
         bus_env = self._get_user_bus_env()
         subprocess.run(
-            ["journalctl", "--user", "-u", f"auto-{module_name}", "-n", "20"],
+            ["journalctl", "--user", "-u", f"auto-{name}", "-n", "20"],
             env=bus_env,
         )
 
-        app_log = LOG_DIR / f"{module_name.replace('daghe-', '')}.log"
+        app_log = LOG_DIR / f"{name}.log"
         if app_log.exists():
             logger.info(f"--- Application Log File: {app_log} ---")
             subprocess.run(["tail", "-n", "20", str(app_log)])
@@ -328,23 +340,20 @@ class DagheOrchestrator:
 
     def run_live(self, module_name):
         """Executes the module wrapper directly to see live output."""
-        wrapper = GEN_DIR / f"run-{module_name}.sh"
+        name = self._sanitise_module_name(module_name)
+        wrapper = GEN_DIR / f"run-{name}.sh"
         if not wrapper.exists():
             logger.error(f"Wrapper not found: {wrapper}. Run 'install' first.")
             return
 
-        logger.info(f"Executing {module_name} live...")
+        logger.info(f"Executing {name} live...")
         subprocess.run([str(wrapper)], env=self._get_clean_env())
 
     def setup_ssh(self):
-        """
-        Initialises SSH environment for the current user.
-        Generates an ED25519 key with strict permissions and populates known_hosts.
-        """
+        """Initialises SSH environment for GitHub integration."""
         ssh_dir = Path(os.path.expanduser("~/.ssh"))
         ssh_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         key_file = ssh_dir / "id_ed25519"
-
         if not key_file.exists():
             logger.info("Generating new ED25519 SSH key...")
             subprocess.run(
@@ -379,43 +388,33 @@ def main():
     parser = argparse.ArgumentParser(description="DaGhE Orchestrator CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    # Command: install
-    install_p = subparsers.add_parser(
-        "install", help="Setup environment and install units"
-    )
+    # Command mapping with autocompletion
+    install_p = subparsers.add_parser("install", help="Install module")
     arg = install_p.add_argument("module")
     if argcomplete:
         arg.completer = get_module_list
 
-    # Command: newmod
     newmod_p = subparsers.add_parser("newmod", help="Create new module skeleton")
-    newmod_p.add_argument("module", help="Name of module (must start with 'daghe-')")
+    newmod_p.add_argument("module")
 
-    # Command: upgrade
-    upgrade_p = subparsers.add_parser(
-        "upgrade", help="Force upgrade Python packages via uv"
-    )
+    upgrade_p = subparsers.add_parser("upgrade", help="Upgrade packages")
     arg = upgrade_p.add_argument("module")
     if argcomplete:
         arg.completer = get_module_list
 
-    # Command: status
-    subparsers.add_parser("status", help="Show systemd user timer status")
+    subparsers.add_parser("status", help="Show status")
 
-    # Command: logs
-    logs_p = subparsers.add_parser("logs", help="Show systemd and app logs")
+    logs_p = subparsers.add_parser("logs", help="Show logs")
     arg = logs_p.add_argument("module")
     if argcomplete:
         arg.completer = get_module_list
 
-    # Command: run
-    run_p = subparsers.add_parser("run", help="Run module live for testing")
+    run_p = subparsers.add_parser("run", help="Run module live")
     arg = run_p.add_argument("module")
     if argcomplete:
         arg.completer = get_module_list
 
-    # Command: setup-ssh
-    subparsers.add_parser("setup-ssh", help="Initialise SSH keys for private repos")
+    subparsers.add_parser("setup-ssh", help="Initialise SSH keys")
 
     if argcomplete:
         argcomplete.autocomplete(parser)
