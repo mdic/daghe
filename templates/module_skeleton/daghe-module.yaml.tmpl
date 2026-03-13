@@ -1,0 +1,14 @@
+module:
+  name: "${NAME}"
+  description: "New DaGhE automation module"
+  type: "python"
+  entrypoint: "${PACKAGE_NAME}.cli"
+  params: "--config config/job.yaml"
+
+schedule:
+  calendar: "daily"
+  random_delay: "1h"
+
+git:
+  code_repo: "git@github.com:user/${NAME}.git"
+  data_repo: "git@github.com:user/${NAME}-data.git"

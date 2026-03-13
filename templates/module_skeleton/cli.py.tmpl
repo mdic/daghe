@@ -1,0 +1,15 @@
+import argparse
+import sys
+from .main import run_job
+
+def main():
+    parser = argparse.ArgumentParser(description="${NAME} CLI")
+    parser.add_argument("--config", required=True, help="Path to YAML config")
+    parser.add_argument("--dry-run", action="store_true", help="Simulate execution")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logs")
+
+    args = parser.parse_args()
+    sys.exit(run_job(args.config, args.dry_run, args.verbose))
+
+if __name__ == "__main__":
+    main()

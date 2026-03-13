@@ -1,0 +1,17 @@
+# DaGhE Module Git Ignore
+__pycache__/
+.venv/
+.env
+*.pyc
+
+# Ignore operational data
+data/*
+!data/.gitkeep
+
+# Ignore active configurations but keep examples/structure
+current/config/*.yaml
+!current/config/*.yaml.example
+!current/config/.gitkeep
+
+# Ignore the DaGhE manifesto (wiring is server-specific)
+daghe-module.yaml
