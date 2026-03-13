@@ -2,9 +2,11 @@
 config/*.env
 config/jobs/*.env
 config/proxies/*.env
+config/cookies/*.txt
 !config/*.env.example
 !config/jobs/*.env.example
 !config/proxies/*.env.example
+!config/cookies/*.txt.example
 
 # Ignore job-specific operational payloads and data
 jobs/*/current/*
