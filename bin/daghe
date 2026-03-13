@@ -248,7 +248,7 @@ class DagheOrchestrator:
     def setup_ssh(self):
         """
         Initialises SSH environment for the current user.
-        Generates an ED25519 key and populates known_hosts for GitHub.
+        Generates an ED25519 key with strict permissions and populates known_hosts.
         """
         ssh_dir = Path(os.path.expanduser("~/.ssh"))
         ssh_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -270,6 +270,11 @@ class DagheOrchestrator:
                 ],
                 check=True,
             )
+
+            # STRICT PERMISSIONS: Ensure only the owner can read the private key
+            # This prevents the 'UNPROTECTED PRIVATE KEY FILE' error
+            os.chmod(key_file, 0o600)
+            logger.info(f"Strict permissions (0600) set for {key_file}")
         else:
             logger.info(f"SSH key already exists at {key_file}")
 
@@ -277,6 +282,8 @@ class DagheOrchestrator:
         logger.info("Updating known_hosts with GitHub fingerprint...")
         known_hosts = ssh_dir / "known_hosts"
         try:
+            # We use a temporary file or check for duplicates in a real scenario,
+            # but for simplicity, we append the scanned keys.
             res = subprocess.run(
                 ["ssh-keyscan", "github.com"],
                 capture_output=True,
@@ -285,9 +292,10 @@ class DagheOrchestrator:
             )
             with open(known_hosts, "a") as f:
                 f.write(res.stdout)
+            os.chmod(known_hosts, 0o644)
         except subprocess.CalledProcessError:
             logger.warning(
-                "Could not reach GitHub for keyscan. You may need to verify manually."
+                "Could not reach GitHub for keyscan. Verify network connectivity."
             )
 
         logger.info("SSH Setup Complete.")
