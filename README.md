@@ -1,166 +1,158 @@
-# daghe
+# DaGhE: Data Gathering Environment
 
-# Create the 'daghe' system user
+**DaGhE** is a production-grade orchestration system designed to manage, schedule, and maintain multiple Python and Bash automation jobs on a systemd-based Linux VPS. 
+
+It follows a **Hybrid Manifest** architecture: each automation "module" is self-contained with its own configuration, while a centralised CLI handles system integration, isolated environment management (via `uv`), and automated maintenance.
+
+---
+
+## 🏗 Core Architecture
+
+DaGhE enforces a strict separation of concerns across three distinct layers:
+
+1.  **Orchestration Layer (`/opt/daghe`)**: The "brain" of the system. Contains the `daghe` CLI, systemd templates, and global configurations.
+2.  **Module Layer (`jobs/<name>/current`)**: The operational logic. Each module is its own Git repository containing a `daghe-module.yaml` manifesto.
+3.  **Data Layer (`jobs/<name>/data`)**: The operational output. Each module's data is stored in a separate directory, typically synchronised with its own dedicated Git repository.
+
+---
+
+## 🛠 System Requirements
+
+*   **Linux VPS** (Systemd-based, e.g., Ubuntu, Debian, Rocky).
+*   **Python 3.11+**.
+*   **[uv](https://github.com/astral-sh/uv)**: Used for high-performance Python environment and dependency management.
+*   **Git**: For versioning orchestration, code, and data.
+
+---
+
+## 🚀 Initial Installation (VPS)
+
+### 1. Create the DaGhE User
+For security, the entire ecosystem runs under a dedicated, non-privileged system user.
+
+```bash
 sudo useradd -m -d /opt/daghe -s /bin/bash daghe
+sudo mkdir -p /opt/daghe
+sudo chown daghe:daghe /opt/daghe
+```
 
-# Initialise the directory structure
-sudo mkdir -p /opt/daghe/{bin,config,templates,jobs,systemd,state,logs}
-sudo chown -R daghe:daghe /opt/daghe
+### 2. Deploy Orchestration
+Switch to the `daghe` user and clone this repository:
 
-# Installation Steps
-## Preparation:
-  - Create a dedicated user: `sudo useradd -m -d /opt/daghe -s /bin/bash daghe`.
-  - Ensure uv is installed: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
-  - Clone this orchestration repo into `/opt/automation`.
-  - Ensure permissions: `sudo chown -R automation-user:automation-user /opt/automation`.
-
-## Internal App Setup:
-  - `cd /opt/automation/apps/check-updates`
-  - `uv sync` (Creates the isolated environment).
-
-## Secrets:
-  - `cp /opt/automation/config/telegram.env.example /opt/automation/config/telegram.env`
-  - Edit telegram.env with your bot credentials.
-
-Edit telegram.env with your bot credentials.
-
-## Systemd Integration:
-  - Link units: `sudo ln -s /opt/automation/systemd/auto-* /etc/systemd/system/`
-  - Link target: `sudo ln -s /opt/automation/systemd/automation.target /etc/systemd/system/`
-  - Reload: sudo systemctl daemon-reload
-
-# Operational Commands
-- To start the entire ecosystem: `/opt/automation/bin/manage-jobs.sh enable-all`
-- To check a specific job's logs: `/opt/automation/bin/manage-jobs.sh logs backup-data`
-- To manually trigger a job run: `sudo systemctl start auto-fetch-api-data.service`
-
-# Notes on Extending the System
-## Adding a New External Job
-
-1. Code Deployment: Clone the external operational script repo into `/opt/automation/jobs/<new-job>/current/`.
-2. Data Setup: Initialize a separate Git repo in `/opt/automation/jobs/<new-job>/data/`.
-3. Wrapper: Copy `bin/run-backup-data.sh` to `bin/run-<new-job>.sh` and point the PAYLOAD variable to the entrypoint of the new script.
-4. Systemd: Create a new `.service` and `.timer` in `systemd/` following the existing patterns.
-5. Manager: Add the job name to the `JOBS` array in `bin/manage-jobs.sh`.
-
-### Update Checking
-
-To add a new package to the check-list, simply edit `/opt/automation/apps/check-updates/config/packages-to-check.txt`. The daily run will automatically report its status via journald (and optionally Telegram).
-
-
-This is the professional English documentation for your orchestration system. You can append this directly to your `README.md`.
-
-It covers the architecture, the "Zero-Effort" systemd deployment, and the standardized Python workflow we developed.
-
----
-
-## 🚀 Systemd Orchestration & Job Management
-
-This repository uses a **Symlink-based Orchestration** strategy. All systemd unit files are tracked in this repository but are linked to the system directory for execution. This ensures that your automation logic remains under version control while being fully integrated with the Linux service manager.
-
-### 🏗 Architecture Overview
-
-1.  **Source of Truth**: All `.service`, `.timer`, and `.target` files are stored in `/opt/automation/systemd/`.
-2.  **System Integration**: Units are symlinked to `/etc/systemd/system/`.
-3.  **Group Control**: All jobs are bound to `automation.target`. Starting/Stopping the target affects the entire suite.
-4.  **Isolation**: Python jobs use `uv` in "non-package" mode (`package = false`) for maximum stability on the VPS.
-
----
-
-### 🛠 Automated Deployment (`install-units.sh`)
-
-To avoid manual configuration, we use an automated installer. The script `bin/install-units.sh`:
-*   Scans `/opt/automation/systemd/` for any `auto-*.{service,timer}` files.
-*   Creates/updates symbolic links in `/etc/systemd/system/`.
-*   Performs a `systemctl daemon-reload`.
-*   Automatically enables all timers and the global target.
-
-**Usage:**
 ```bash
-# Sync all systemd units and enable timers
-/opt/automation/bin/manage-jobs.sh install
+sudo -u daghe -i
+cd /opt/daghe
+git clone <orchestration-repo-url> .
+```
+
+### 3. Initialise the Orchestrator Environment
+DaGhE uses its own isolated environment to manage other jobs.
+
+```bash
+uv sync
+chmod +x bin/daghe bin/telegram-notify.sh
+```
+
+### 4. Configure Secrets
+Create the Telegram notification environment file (not tracked by Git):
+
+```bash
+cp config/telegram.env.example config/telegram.env
+# Edit with your BOT_TOKEN and CHAT_ID
+nano config/telegram.env
+chmod 600 config/*.env
 ```
 
 ---
 
-### 📝 Workflow: Adding a New Job
+## 📦 Module Management
 
-To add a new job (e.g., `db-backup`) to the system, follow these 4 steps:
+### 1. Adding a New Module
+To add a module (e.g., `daghe-youtube-search-metadata`):
 
-#### 1. Prepare the Payload
-Deploy your code to: `/opt/automation/jobs/db-backup/current/`.
-If it's a Python job, ensure the structure is:
-```text
-current/
-├── pyproject.toml  # Must contain [tool.uv] package = false
-└── src/
-    └── db_backup/
-        └── main.py
-```
+1.  **Clone the code**: 
+    ```bash
+    cd /opt/daghe/jobs/daghe-youtube-search-metadata/current
+    git clone <code-repo-url> .
+    ```
+2.  **Clone the data** (if applicable):
+    ```bash
+    cd /opt/daghe/jobs/daghe-youtube-search-metadata/data
+    git clone <data-repo-url> .
+    ```
+3.  **Install/Register with DaGhE**:
+    ```bash
+    # From the /opt/daghe root
+    uv run bin/daghe install daghe-youtube-search-metadata
+    ```
 
-#### 2. Create the Wrapper
-Create `/opt/automation/bin/run-db-backup.sh`:
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-source "/opt/automation/config/global.env"
+### 2. The `daghe-module.yaml` Manifesto
+Every module must have this file in its `current/` directory. It defines the identity and schedule of the job:
 
-# Standard locking & PYTHONPATH setup
-cd "/opt/automation/jobs/db-backup/current"
-export PYTHONPATH="src"
+```yaml
+module:
+  name: "daghe-youtube-search-metadata"
+  description: "Downloads YouTube metadata"
+  type: "python" # or "bash"
+  entrypoint: "youtube_search_metadata.cli"
+  params: "--config config/job.yaml"
 
-uv run python -m db_backup.main --config config/job.yaml
-```
+schedule:
+  calendar: "*-*-1/2 04:00:00" # Every two days at 4 AM
+  random_delay: "4h"           # Start window: 4 AM to 8 AM
 
-#### 3. Define Systemd Units
-Create the service and timer in `/opt/automation/systemd/`:
-*   `auto-db-backup.service`: Points to your new wrapper.
-*   `auto-db-backup.timer`: Defines the schedule (e.g., `OnCalendar=hourly`).
-
-#### 4. Register the Job
-Simply run the management command:
-```bash
-/opt/automation/bin/manage-jobs.sh install
+updates:
+  auto_upgrade_packages:
+    - "yt-dlp"
 ```
 
 ---
 
-### 🖥 Operational CLI
+## ⚙️ The `daghe` CLI Commands
 
-The `manage-jobs.sh` script is your primary interface for daily operations:
+The `daghe` script is a location-agnostic tool. It detects if it is running in **Testing Mode** (local PC) or **Production Mode** (VPS).
 
 | Command | Description |
 | :--- | :--- |
-| `install` | Syncs systemd units from the repo to the system and enables timers. |
-| `refresh` | Reloads the systemd daemon (useful after manual file edits). |
-| `status` | Shows the status of all timers and services. |
-| `list` | Lists all configured jobs in the suite. |
-| `start <job>` | Manually triggers a specific job immediately. |
-| `logs <job>` | Streams real-time logs (journald) for a specific job. |
-| `enable-all` | Starts the global automation target and all timers. |
-| `disable-all` | Stops everything and disables all timers. |
+| `uv run bin/daghe install <name>` | Synchronises the module's `uv` environment, generates wrappers, and enables systemd timers. |
+| `uv run bin/daghe upgrade <name>` | Forcefully upgrades the Python packages listed in the module's manifesto. |
+| `uv run bin/daghe status` | Lists all active DaGhE timers and their next scheduled runs. |
+| `journalctl -u auto-<name>.service -f` | (Standard Linux) View real-time logs for a specific job. |
 
 ---
 
-### 🐍 Python Environment Notes
+## 🔄 Automated Maintenance
 
-For performance and reliability on the VPS, we use **uv** in non-package mode.
-*   **No Build Step**: `uv sync` manages dependencies without building a wheel.
-*   **Fast Execution**: The code is run directly from the `src/` directory.
-*   **Requirement**: Every Python wrapper must `export PYTHONPATH="src"` before calling `uv run`.
+DaGhE is designed to be self-maintaining. By creating a module named `daghe-check-updates`, you can schedule a weekly task that calls `daghe upgrade` on your other modules. This ensures that fast-moving libraries like `yt-dlp` are always kept up to date without manual intervention.
 
 ---
 
-### 📂 Directory Structure Reminder
+## 💻 Local Development & Testing
+
+You can clone this entire orchestration repository onto your local machine for testing. 
+
+*   **Dynamic Paths**: The CLI uses `BASE_DIR` auto-discovery. Generated scripts will point to your local folders (e.g., `/home/user/git/daghe/...`).
+*   **Safety**: If the CLI detects it is not in `/opt/daghe`, it will **not** attempt to use `sudo` or modify `/etc/systemd/system/`. It will only generate the files for inspection.
+
+---
+
+## 📂 Directory Structure Convention
 
 ```text
-/opt/automation
-├── bin/          # Wrappers and Management scripts (Tracked)
-├── config/       # Global and Job-specific configs (Tracked/Templates)
-├── systemd/      # Systemd Unit Sources (Tracked)
+/opt/daghe
+├── bin/
+│   ├── daghe                # The Orchestrator CLI
+│   ├── generated/           # Auto-generated Bash wrappers
+│   └── telegram-notify.sh   # Shared notification utility
+├── config/
+│   ├── global.env           # Global environment variables
+│   └── telegram.env         # Secrets (Untracked)
+├── templates/               # Blueprints for system generation
+├── systemd/                 # Master copies of .service and .timer files
 ├── jobs/
-│   └── <name>/
-│       ├── current/  # External Job Code (Not tracked here)
-│       └── data/     # External Job Data (Not tracked here)
-└── state/        # Runtime locks and PID files (Ignored)
+│   └── <module-name>/
+│       ├── current/         # Operational code repository
+│       └── data/            # Operational data repository
+├── logs/                    # Centralised log collection
+└── state/                   # Runtime lock files
 ```
