@@ -1,0 +1,10 @@
+[Unit]
+Description=DaGhE Modulo: ${DESCRIPTION}
+PartOf=automation.target
+
+[Service]
+Type=oneshot
+User=daghe
+Group=daghe
+WorkingDirectory=${BASE_DIR}
+ExecStart=${BASE_DIR}/bin/generated/run-${NAME}.sh

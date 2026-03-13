@@ -1,8 +1,15 @@
 # daghe
 
+# Create the 'daghe' system user
+sudo useradd -m -d /opt/daghe -s /bin/bash daghe
+
+# Initialise the directory structure
+sudo mkdir -p /opt/daghe/{bin,config,templates,jobs,systemd,state,logs}
+sudo chown -R daghe:daghe /opt/daghe
+
 # Installation Steps
 ## Preparation:
-  - Create a dedicated user: `sudo useradd -m -d /opt/automation automation-user`.
+  - Create a dedicated user: `sudo useradd -m -d /opt/daghe -s /bin/bash daghe`.
   - Ensure uv is installed: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
   - Clone this orchestration repo into `/opt/automation`.
   - Ensure permissions: `sudo chown -R automation-user:automation-user /opt/automation`.

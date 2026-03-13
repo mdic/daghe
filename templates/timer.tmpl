@@ -1,0 +1,10 @@
+[Unit]
+Description=DaGhE Timer for ${NAME}
+
+[Timer]
+OnCalendar=${CALENDAR}
+RandomizedDelaySec=${RANDOM_DELAY}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
