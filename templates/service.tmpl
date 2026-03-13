@@ -1,10 +1,9 @@
 [Unit]
-Description=DaGhE Modulo: ${DESCRIPTION}
-PartOf=automation.target
+Description=DaGhE Module: ${DESCRIPTION}
+# In user mode, we bound to the user session default target
+PartOf=default.target
 
 [Service]
 Type=oneshot
-User=daghe
-Group=daghe
 WorkingDirectory=${BASE_DIR}
 ExecStart=${BASE_DIR}/bin/generated/run-${NAME}.sh

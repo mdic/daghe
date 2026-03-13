@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# UK English spelling.
+# UK English spelling. Global maintenance script for the Zero-Sudo architecture.
 set -euo pipefail
 
-# BASE_DIR is provided by the generated wrapper
-echo "[$(date)] Starting global maintenance..."
-
-# We call 'uv run bin/daghe' from the root of the orchestrator
-# This ensures we use the orchestrator's environment
-ORCHESTRATOR_ROOT="${BASE_DIR}"
+# BASE_DIR is injected by the generated wrapper
+echo "[$(date)] Initialising dependency maintenance..."
 
 MODULES=(
     "daghe-youtube-search-metadata"
 )
 
 for MODULE in "${MODULES[@]}"; do
-    echo "Updating $MODULE..."
-    cd "$ORCHESTRATOR_ROOT"
-    uv run bin/daghe upgrade "$MODULE"
+    echo "Processing $MODULE..."
+    # Call the orchestrator CLI directly
+    uv run --project "${BASE_DIR}" "${BASE_DIR}/bin/daghe" upgrade "$MODULE"
 done
 
-echo "[$(date)] All modules processed."
+"${BASE_DIR}/bin/telegram-notify.sh" "INFO" "DaGhE Maintenance: Automated upgrades for ${#MODULES[@]} modules completed."
+echo "[$(date)] Maintenance cycle finished."

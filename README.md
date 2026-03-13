@@ -1,193 +1,81 @@
 # DaGhE: Data Gathering Environment
 
-**DaGhE** is a professional-grade automation orchestration system designed to manage, schedule, and maintain multiple Python and Bash jobs on a systemd-based Linux VPS. 
-
-It implements a **Hybrid Manifest** architecture: each automation "module" is self-contained with its own configuration, while a centralised Python CLI handles system integration, isolated environment management (via `uv`), and automated maintenance.
+**DaGhE** is a production-grade automation system designed to manage automation jobs on a systemd-based Linux VPS. It utilises **systemd user instances** to provide a secure, self-contained environment that requires **zero sudo/root privileges** after initial setup.
 
 ---
 
-## 🏗 Core Philosophy & Layers
+## 🏗 Philosophy: Zero-Sudo & Absolute Confinement
 
-DaGhE enforces a strict separation of concerns across three distinct layers to ensure maintainability and security:
-
-1.  **Orchestration Layer (`/opt/daghe`)**: The system "brain". It contains the `daghe` CLI, systemd blueprints, and global configuration.
-2.  **Module Layer (`jobs/<name>/current`)**: The operational logic. Each module is a standalone Git repository containing its code and a `daghe-module.yaml` manifesto.
-3.  **Data Layer (`jobs/<name>/data`)**: The operational output. Each module has a dedicated data directory, typically synchronised with a separate Git repository to decouple code history from data history.
+*   **Security**: The `daghe` user manages its own lifecycle independently.
+*   **Portability**: The entire system is confined to `/opt/daghe`.
+*   **Isolation**: Every module lives in its own `uv` environment.
 
 ---
 
-## 🛠 Prerequisites
+## 🚀 Initial Installation (VPS)
 
-*   **Linux VPS** (Systemd-based: Ubuntu, Debian, Rocky, etc.).
-*   **Python 3.11+**.
-*   **[uv](https://github.com/astral-sh/uv)**: High-performance Python package and environment manager.
-*   **Git**: For versioning orchestration, modules, and data.
-
----
-
-## 🚀 Initial Setup (VPS)
-
-### 1. Create the System User
-All DaGhE operations run under an isolated, non-privileged system user.
-
+### 1. Create the System User (As root/sudo)
 ```bash
 sudo useradd -m -d /opt/daghe -s /bin/bash daghe
 sudo mkdir -p /opt/daghe
 sudo chown daghe:daghe /opt/daghe
 ```
 
-### 2. Initialise the Orchestrator
-Switch to the `daghe` user and clone the orchestration repository:
+### 2. Enable Persistent User Services (As root/sudo)
+This ensures DaGhE timers start at boot and continue running without an active session.
+```bash
+sudo loginctl enable-linger daghe
+```
 
+### 3. Deploy Orchestration (As daghe user)
 ```bash
 sudo -u daghe -i
 cd /opt/daghe
 git clone <orchestration-repo-url> .
-
-# Initialise the orchestrator's own environment
 uv sync
 chmod +x bin/daghe bin/telegram-notify.sh
-```
-
-### 3. Configure Secrets
-Create the notification environment file (Git-ignored):
-
-```bash
-cp config/telegram.env.example config/telegram.env
-# Add your BOT_TOKEN and CHAT_ID
-nano config/telegram.env
-chmod 600 config/*.env
 ```
 
 ---
 
 ## 📦 Module Lifecycle Management
 
-### 1. Adding a New Module
-To integrate a module (e.g., `daghe-youtube-search-metadata`):
+Deploy your module repository to `jobs/<module-name>/current` and run:
 
-1.  **Deploy Code**: 
-    ```bash
-    cd /opt/daghe/jobs/daghe-youtube-search-metadata/current
-    git clone <code-repo-url> .
-    ```
-2.  **Deploy Data**: 
-    ```bash
-    cd /opt/daghe/jobs/daghe-youtube-search-metadata/data
-    git clone <data-repo-url> .
-    ```
-3.  **Install/Register**:
-    ```bash
-    # From the /opt/daghe root
-    uv run bin/daghe install daghe-youtube-search-metadata
-    ```
-
-### 2. The `daghe-module.yaml` Manifesto
-Each module must contain this file in its `current/` directory.
-
-```yaml
-module:
-  name: "daghe-youtube-search-metadata"
-  description: "Downloads YouTube metadata via yt-dlp"
-  type: "python" # or "bash"
-  entrypoint: "youtube_search_metadata.cli" # Python module or Bash script name
-  params: "--config config/job.yaml"
-
-schedule:
-  # systemd OnCalendar syntax: every 2 days at 4 AM
-  calendar: "*-*-1/2 04:00:00" 
-  # Randomized delay window: starts between 4 AM and 8 AM
-  random_delay: "4h"
-
-updates:
-  # List packages to be updated via 'daghe upgrade'
-  auto_upgrade_packages:
-    - "yt-dlp"
+```bash
+# Register, sync venv, and enable timers
+uv run bin/daghe install <module-name>
 ```
 
----
-
-## ⚙️ CLI Commands Reference
-
-The `daghe` CLI is **location-agnostic**. It detects if it is running in **Testing Mode** (local PC) or **Production Mode** (VPS at `/opt/daghe`).
-
-| Command | Description |
+### Operational Commands
+| Command | Action |
 | :--- | :--- |
-| `uv run bin/daghe install <name>` | Synchronises the module's `uv` venv, generates bash wrappers, and enables systemd timers. |
-| `uv run bin/daghe upgrade <name>` | Forcefully upgrades the Python packages listed in the module's manifesto. |
-| `uv run bin/daghe status` | Shows a list of all active DaGhE timers and their scheduled runs. |
+| `uv run bin/daghe status` | View active timers and next runs. |
+| `systemctl --user list-units auto-*` | Check status of user-level units. |
+| `journalctl --user -u auto-<name>.service -f` | Monitor real-time logs. |
 
 ---
 
-## 🧪 Testing Strategies
+## 🧪 Testing
 
-DaGhE supports three levels of testing to ensure reliability before production deployment.
-
-### Option 1: Generated Wrapper Test (Closest to Production)
-This is the recommended test for the VPS or local development. It uses the Bash wrapper generated by the `install` command, testing path resolution, environment loading, and `flock` locking.
-
-```bash
-# Run the generated wrapper from the project root
-./bin/generated/run-daghe-youtube-search-metadata.sh
-```
-
-### Option 2: Direct Logic Test (Module Development)
-Best for testing the Python logic itself. You manually enter the module directory and use `uv run`.
-
-```bash
-cd jobs/daghe-youtube-search-metadata/current
-# Set PYTHONPATH so Python can find the 'src' directory
-PYTHONPATH=src uv run python -m youtube_search_metadata.cli --config config/job.yaml --dry-run --verbose
-```
-
-### Option 3: Systemd Forced Run (Production Only)
-To trigger a job immediately on the VPS, bypassing the timer:
-
-```bash
-sudo systemctl start auto-daghe-youtube-search-metadata.service
-# Monitor logs in real-time
-journalctl -u auto-daghe-youtube-search-metadata.service -f
-```
-
----
-
-## 💻 Local Development & Portability
-
-You can clone the entire DaGhE ecosystem to your local machine (e.g., `~/git_repos/daghe`).
-
-1.  **Auto-Discovery**: `bin/daghe` detects your local path and sets `BASE_DIR` accordingly.
-2.  **Safety Guardrails**: When not in `/opt/daghe`, the CLI skips `sudo` and system-level symlinking. It only generates files in `bin/generated/` and `systemd/` for your inspection.
-3.  **Environment Isolation**: `bin/daghe` automatically cleans the environment variables to prevent your local dev environment from interfering with the module's `uv sync` process.
-
----
-
-## 🔄 Automated Maintenance
-
-To keep the system updated (especially for tools like `yt-dlp` that break frequently), create a maintenance module:
-
-1.  Create `jobs/daghe-check-updates/`.
-2.  Define a `maintenance.sh` script that calls `uv run bin/daghe upgrade <module-name>`.
-3.  Schedule it via `daghe-module.yaml` (e.g., every Monday at 3 AM).
+DaGhE supports **Testing Mode**. If you run the CLI outside `/opt/daghe` (e.g., on your local PC), it will generate all wrappers and unit files in `bin/generated/` and `systemd/` for inspection, but it will **not** attempt to modify your user session or system configuration.
 
 ---
 
 ## 📂 Directory Structure
-
-```text
-/opt/daghe
-├── bin/
-│   ├── daghe                # The Orchestrator CLI
-│   ├── generated/           # Auto-generated Bash wrappers (Tracked/Local)
-│   └── telegram-notify.sh   # Shared notification helper
-├── config/
-│   ├── global.env           # System-wide variables
-│   └── telegram.env         # Untracked secrets
-├── templates/               # Source blueprints for generation
-├── systemd/                 # Master copies of .service and .timer files
-├── jobs/
-│   └── <module-name>/
-│       ├── current/         # Module Logic (Standalone Git Repo)
-│       └── data/            # Module Data (Standalone Git Repo)
-├── logs/                    # Standardised operational logs
-└── state/                   # Lock files to prevent overlapping runs
+*   `bin/`: Orchestrator CLI and generated wrappers.
+*   `jobs/`: Isolated modules (code and data repositories).
+*   `.config/systemd/user/`: Active systemd unit symlinks (Self-contained).
+*   `logs/`: Centralised operational logs.
 ```
+
+---
+
+### 5. Migration Guide for your VPS
+
+1.  **Remove Old Files**: Delete `/etc/sudoers.d/daghe` and any DaGhE files in `/etc/systemd/system/`.
+2.  **Linger**: Run `sudo loginctl enable-linger daghe`.
+3.  **Clean Setup**: Ensure `/opt/daghe` is clean, clone the orchestration repo, and run `uv sync`.
+4.  **Install**: For each job, run `uv run bin/daghe install <job-name>`.
+
+Your system is now a masterpiece of Linux engineering: **secure, portable, and fully automated.**
