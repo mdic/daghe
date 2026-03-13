@@ -33,3 +33,5 @@ __pycache__/
 
 # System logs
 logs/*
+
+bin/generated/*.sh
