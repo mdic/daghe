@@ -3,19 +3,20 @@
 set -euo pipefail
 
 # Discover dynamic BASE_DIR relative to script location
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export BASE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# We use $$ to escape the dollar sign for Python's Template engine
+SCRIPT_DIR="$$(cd "$$(dirname "$${BASH_SOURCE[0]}")" && pwd)"
+export BASE_DIR="$$(cd "$${SCRIPT_DIR}/../.." && pwd)"
 
 # Logic for strict locking using project state directory
-LOCK_FILE="${BASE_DIR}/state/${NAME}.lock"
-exec 9>"$LOCK_FILE"
+LOCK_FILE="$${BASE_DIR}/state/${NAME}.lock"
+exec 9>"$$LOCK_FILE"
 if ! flock -n 9; then
-    echo "[$(date)] ${NAME}: Already running, skipping."
+    echo "[$$({date})] ${NAME}: Already running, skipping."
     exit 0
 fi
 
-cd "${BASE_DIR}/jobs/${NAME}/current"
+cd "$${BASE_DIR}/jobs/${NAME}/current"
 export PYTHONPATH="src"
 
-# Execute using uv in the module's own environment
+# Run with uv using the module's environment
 uv run python -m ${ENTRYPOINT} ${PARAMS}
