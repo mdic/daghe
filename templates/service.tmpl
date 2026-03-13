@@ -1,8 +1,10 @@
 [Unit]
-Description=DaGhE Module: ${DESCRIPTION}
+Description=DaGhE Modulo: ${DESCRIPTION}
 PartOf=default.target
 
 [Service]
 Type=oneshot
+# Ensure uv and standard binaries are in the PATH for the user session
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:${BASE_DIR}/bin"
 WorkingDirectory=${BASE_DIR}
 ExecStart=${BASE_DIR}/bin/generated/run-${NAME}.sh
