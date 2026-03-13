@@ -90,6 +90,10 @@ class DagheOrchestrator:
 
     def generate_configs(self, module_name):
         data = self._load_manifest(module_name)
+
+        # Estrai il nome del proxy se presente, altrimenti stringa vuota
+        proxy_name = data.get("proxy", {}).get("name", "")
+
         mapping = {
             "BASE_DIR": str(BASE_DIR),
             "NAME": data["module"]["name"],
@@ -98,7 +102,9 @@ class DagheOrchestrator:
             "PARAMS": data["module"].get("params", ""),
             "CALENDAR": data["schedule"]["calendar"],
             "RANDOM_DELAY": data["schedule"].get("random_delay", "0s"),
+            "PROXY_NAME": proxy_name,  # Aggiunto al mapping
         }
+
         self._render(
             "wrapper.sh.tmpl",
             GEN_DIR / f"run-{module_name}.sh",

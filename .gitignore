@@ -1,8 +1,10 @@
 # Ignore secrets
 config/*.env
 config/jobs/*.env
+config/proxies/*.env
 !config/*.env.example
 !config/jobs/*.env.example
+!config/proxies/*.env.example
 
 # Ignore job-specific operational payloads and data
 jobs/*/current/*
