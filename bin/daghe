@@ -3,7 +3,7 @@
 DaGhE (Automation Orchestrator) CLI
 UK English spelling.
 Location-agnostic architecture for local testing and VPS production.
-Utilises systemd user instances for a secure, non-privileged execution model.
+Utilises systemd user instances with automated bus discovery.
 """
 
 import argparse
@@ -47,7 +47,6 @@ logger = logging.getLogger("daghe")
 class DagheOrchestrator:
     def __init__(self):
         self._initialise_filesystem()
-        # Determine if we are in Production or Testing mode
         self.is_production = BASE_DIR == PRODUCTION_PATH
         if not self.is_production:
             logger.warning(f"Running in TESTING MODE (Detected Base: {BASE_DIR})")
@@ -59,53 +58,57 @@ class DagheOrchestrator:
             d.mkdir(parents=True, exist_ok=True)
 
     def _get_clean_env(self):
-        """
-        Returns a copy of the current environment variables, stripped of
-        Python/Venv specific variables to prevent conflicts.
-        """
+        """Returns a copy of environment variables without orchestrator venv bloat."""
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
         env.pop("PYTHONPATH", None)
         env.pop("__PYVENV_LAUNCHER__", None)
         return env
 
+    def _get_user_bus_env(self):
+        """
+        Calculates the necessary environment variables to connect to the
+        systemd user bus. This is critical when running as a service user.
+        """
+        env = self._get_clean_env()
+        uid = os.getuid()
+        runtime_dir = f"/run/user/{uid}"
+
+        # Point systemd to the correct runtime and bus socket
+        env["XDG_RUNTIME_DIR"] = runtime_dir
+        env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime_dir}/bus"
+        return env
+
     def _load_manifest(self, module_name):
-        """Load and parse the daghe-module.yaml for the specific module."""
+        """Load and parse the daghe-module.yaml."""
         manifest_path = JOBS_DIR / module_name / "current" / "daghe-module.yaml"
         if not manifest_path.exists():
             logger.error(f"Manifest missing at: {manifest_path}")
             sys.exit(1)
-
         with open(manifest_path, "r") as f:
             return yaml.safe_load(f)
 
     def setup_module_env(self, module_name):
-        """Initialise or synchronise the uv virtual environment for a Python module."""
+        """Sync the uv environment for Python modules."""
         data = self._load_manifest(module_name)
         if data.get("module", {}).get("type") != "python":
             return
-
         module_cwd = JOBS_DIR / module_name / "current"
-        pyproject_path = module_cwd / "pyproject.toml"
-
-        if not pyproject_path.exists():
-            logger.warning(f"No pyproject.toml found in {module_cwd}.")
+        if not (module_cwd / "pyproject.toml").exists():
             return
-
         logger.info(f"Synchronising uv environment for {module_name}...")
         try:
+            # Note: We use clean env here to avoid venv nesting
             subprocess.run(
                 ["uv", "sync"], cwd=module_cwd, check=True, env=self._get_clean_env()
             )
-            logger.info(f"Environment for {module_name} synchronised successfully.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to synchronise environment for {module_name}: {e}")
+            logger.error(f"Failed to synchronise environment: {e}")
             sys.exit(1)
 
     def generate_configs(self, module_name):
         """Render templates into functional bash wrappers and systemd units."""
         data = self._load_manifest(module_name)
-
         mapping = {
             "BASE_DIR": str(BASE_DIR),
             "NAME": data["module"]["name"],
@@ -115,7 +118,6 @@ class DagheOrchestrator:
             "CALENDAR": data["schedule"]["calendar"],
             "RANDOM_DELAY": data["schedule"].get("random_delay", "0s"),
         }
-
         self._render(
             "wrapper.sh.tmpl",
             GEN_DIR / f"run-{module_name}.sh",
@@ -130,20 +132,12 @@ class DagheOrchestrator:
         )
 
     def _render(self, template_name, output_path, mapping, is_executable=False):
-        """Helper to read a template, substitute variables, and write output."""
         template_file = TEMPLATES_DIR / template_name
-        if not template_file.exists():
-            logger.error(f"Template not found: {template_file}")
-            sys.exit(1)
-
         with open(template_file, "r") as f:
             src = Template(f.read())
-            # Use safe_substitute to ignore Bash variables (e.g. ${BASH_SOURCE})
             content = src.safe_substitute(mapping)
-
         with open(output_path, "w") as f:
             f.write(content)
-
         if is_executable:
             os.chmod(output_path, 0o755)
         logger.info(f"Generated: {output_path}")
@@ -158,6 +152,9 @@ class DagheOrchestrator:
             return
 
         units = [f"auto-{module_name}.service", f"auto-{module_name}.timer"]
+        # Use the specialised bus environment for all systemctl calls
+        bus_env = self._get_user_bus_env()
+
         try:
             for unit in units:
                 src = SYSTEMD_MASTER_DIR / unit
@@ -166,14 +163,15 @@ class DagheOrchestrator:
                     dst.unlink()
                 dst.symlink_to(src)
 
-            subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+            subprocess.run(
+                ["systemctl", "--user", "daemon-reload"], check=True, env=bus_env
+            )
             subprocess.run(
                 ["systemctl", "--user", "enable", "--now", f"auto-{module_name}.timer"],
                 check=True,
+                env=bus_env,
             )
-            logger.info(
-                f"Module '{module_name}' installed and enabled in user session."
-            )
+            logger.info(f"Module '{module_name}' successfully installed and enabled.")
         except Exception as e:
             logger.error(f"Failed to install systemd user units: {e}")
 
@@ -181,29 +179,21 @@ class DagheOrchestrator:
         """Perform automated dependency upgrades via uv."""
         data = self._load_manifest(module_name)
         packages = data.get("updates", {}).get("auto_upgrade_packages", [])
-
         if not packages:
-            logger.info(f"No auto-upgrade packages defined for {module_name}.")
             return
-
         module_cwd = JOBS_DIR / module_name / "current"
         logger.info(f"Upgrading dependencies for {module_name}...")
-
-        clean_env = self._get_clean_env()
+        env = self._get_clean_env()
         for pkg in packages:
-            logger.info(f"Requesting upgrade for package: {pkg}")
-            res = subprocess.run(
-                ["uv", "add", "--upgrade", pkg], cwd=module_cwd, env=clean_env
-            )
-            if res.returncode == 0:
-                logger.info(f"Successfully upgraded {pkg}.")
-            else:
-                logger.error(f"Failed to upgrade {pkg}.")
+            subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_cwd, env=env)
 
     def status(self):
-        """Display summary of active DaGhE timers."""
+        """Display summary of all active DaGhE timers."""
         if self.is_production:
-            subprocess.run(["systemctl", "--user", "list-timers", "auto-*"])
+            subprocess.run(
+                ["systemctl", "--user", "list-timers", "auto-*"],
+                env=self._get_user_bus_env(),
+            )
         else:
             logger.info(f"Status check: BASE_DIR is {BASE_DIR}")
 
