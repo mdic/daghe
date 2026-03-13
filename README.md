@@ -1,6 +1,7 @@
 # DaGhE: Data Gathering Environment
 
 **DaGhE** is a production-grade orchestration platform for Linux VPS environments. It manages multiple Python and Bash jobs using a **Zero-Sudo** architecture. By leveraging **systemd user-instances**, DaGhE remains entirely confined to its own directory, requiring no root privileges for day-to-day operations.
+New modules can be added by following the [PROMPT_TEMPLATE.md](PROMPT_TEMPLATE.md) specification in case you wish to vibe code.
 
 ---
 
