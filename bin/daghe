@@ -2,7 +2,7 @@
 """
 DaGhE (Automation Orchestrator) CLI
 UK English spelling.
-Now includes Log inspection and Live Run helpers.
+Now includes dynamic shell autocompletion via argcomplete.
 """
 
 import argparse
@@ -15,11 +15,16 @@ from string import Template
 
 import yaml
 
+# Check if argcomplete is available for shell completion
+try:
+    import argcomplete
+except ImportError:
+    argcomplete = None
+
 # --- Dynamic Path Discovery ---
 SCRIPT_PATH = Path(__file__).resolve()
 BASE_DIR = SCRIPT_PATH.parent.parent
 
-# Sub-directories relative to BASE_DIR
 BIN_DIR = BASE_DIR / "bin"
 GEN_DIR = BIN_DIR / "generated"
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -37,6 +42,18 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("daghe")
+
+
+def get_module_list(prefix, **kwargs):
+    """
+    Dynamic completer function for argcomplete.
+    Scans the jobs directory and returns folder names starting with 'daghe-'.
+    """
+    if not JOBS_DIR.exists():
+        return []
+    return [
+        d.name for d in JOBS_DIR.iterdir() if d.is_dir() and d.name.startswith("daghe-")
+    ]
 
 
 class DagheOrchestrator:
@@ -221,18 +238,50 @@ class DagheOrchestrator:
         # Use clean env to avoid venv nesting but keep terminal output
         subprocess.run([str(wrapper)], env=self._get_clean_env())
 
+    pass
+
 
 def main():
     parser = argparse.ArgumentParser(description="DaGhE Orchestrator CLI")
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("install", help="Install module").add_argument("module")
-    subparsers.add_parser("upgrade", help="Upgrade packages").add_argument("module")
+
+    # Install Command
+    install_p = subparsers.add_parser("install", help="Install module")
+    arg = install_p.add_argument("module")
+    if argcomplete:
+        arg.completer = get_module_list  # Link the dynamic list
+
+    # Upgrade Command
+    upgrade_p = subparsers.add_parser("upgrade", help="Upgrade packages")
+    arg = upgrade_p.add_argument("module")
+    if argcomplete:
+        arg.completer = get_module_list
+
+    # Status Command
     subparsers.add_parser("status", help="Show status")
-    subparsers.add_parser("logs", help="Show logs").add_argument("module")
-    subparsers.add_parser("run", help="Run module live").add_argument("module")
+
+    # Logs Command
+    logs_p = subparsers.add_parser("logs", help="Show logs")
+    arg = logs_p.add_argument("module")
+    if argcomplete:
+        arg.completer = get_module_list
+
+    # Run Command
+    run_p = subparsers.add_parser("run", help="Run module live")
+    arg = run_p.add_argument("module")
+    if argcomplete:
+        arg.completer = get_module_list
+
+    # SSH Setup Command
+    subparsers.add_parser("setup-ssh", help="Initialise SSH keys")
+
+    # Activating autocompletion logic
+    if argcomplete:
+        argcomplete.autocomplete(parser)
 
     args = parser.parse_args()
     daghe = DagheOrchestrator()
+
     if args.command == "install":
         daghe.install(args.module)
     elif args.command == "upgrade":
@@ -243,6 +292,8 @@ def main():
         daghe.show_logs(args.module)
     elif args.command == "run":
         daghe.run_live(args.module)
+    elif args.command == "setup-ssh":
+        daghe.setup_ssh()
     else:
         parser.print_help()
 
