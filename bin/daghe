@@ -67,12 +67,23 @@ class DagheOrchestrator:
         return env
 
     def _load_manifest(self, module_name):
+        """
+        Load and parse the daghe-module.yaml for the specific module.
+        UK English: Ensure the manifest is not empty to prevent NoneType crashes.
+        """
         manifest_path = JOBS_DIR / module_name / "current" / "daghe-module.yaml"
         if not manifest_path.exists():
             logger.error(f"Manifest missing at: {manifest_path}")
             sys.exit(1)
+
         with open(manifest_path, "r") as f:
-            return yaml.safe_load(f)
+            data = yaml.safe_load(f)
+
+            # If the file is empty or only contains comments, safe_load returns None
+            if data is None:
+                logger.error(f"Manifest file is empty: {manifest_path}")
+                sys.exit(1)
+            return data
 
     def setup_module_env(self, module_name):
         data = self._load_manifest(module_name)
@@ -89,10 +100,16 @@ class DagheOrchestrator:
             sys.exit(1)
 
     def generate_configs(self, module_name):
+        """
+        Render templates into functional bash wrappers and systemd units.
+        Includes robust handling for optional sections like 'proxy'.
+        """
         data = self._load_manifest(module_name)
 
-        # Estrai il nome del proxy se presente, altrimenti stringa vuota
-        proxy_name = data.get("proxy", {}).get("name", "")
+        # Robust extraction of proxy name.
+        # We use 'or {}' to handle cases where 'proxy:' exists in YAML but is empty.
+        proxy_section = data.get("proxy") or {}
+        proxy_name = proxy_section.get("name", "")
 
         mapping = {
             "BASE_DIR": str(BASE_DIR),
@@ -102,7 +119,7 @@ class DagheOrchestrator:
             "PARAMS": data["module"].get("params", ""),
             "CALENDAR": data["schedule"]["calendar"],
             "RANDOM_DELAY": data["schedule"].get("random_delay", "0s"),
-            "PROXY_NAME": proxy_name,  # Aggiunto al mapping
+            "PROXY_NAME": proxy_name,
         }
 
         self._render(
