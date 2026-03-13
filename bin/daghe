@@ -54,6 +54,20 @@ class DagheOrchestrator:
         for d in [GEN_DIR, LOG_DIR, SYSTEMD_REPO_DIR, STATE_DIR]:
             d.mkdir(parents=True, exist_ok=True)
 
+    def _get_clean_env(self):
+        """
+        Returns a copy of the current environment variables, stripped of
+        Python/Venv specific variables to prevent conflicts between the
+        orchestrator's environment and the module's environment.
+        """
+        env = os.environ.copy()
+        # Remove variables set by 'uv run' of the orchestrator
+        env.pop("VIRTUAL_ENV", None)
+        env.pop("PYTHONPATH", None)
+        # Removing __PYVENV_LAUNCHER__ if present (common on macOS/some Linux distros)
+        env.pop("__PYVENV_LAUNCHER__", None)
+        return env
+
     def _load_manifest(self, module_name):
         """Load and parse the daghe-module.yaml for the specific module."""
         manifest_path = JOBS_DIR / module_name / "current" / "daghe-module.yaml"
@@ -67,7 +81,7 @@ class DagheOrchestrator:
     def setup_module_env(self, module_name):
         """
         Initialise or synchronise the uv virtual environment for a Python module.
-        Only executes if the module type is 'python'.
+        Uses a clean environment to avoid venv inheritance issues.
         """
         data = self._load_manifest(module_name)
         if data.get('module', {}).get('type') != 'python':
@@ -83,8 +97,13 @@ class DagheOrchestrator:
 
         logger.info(f"Synchronising uv environment for {module_name}...")
         try:
-            # Executes 'uv sync' inside the module's 'current' directory
-            subprocess.run(["uv", "sync"], cwd=module_cwd, check=True)
+            # Executes 'uv sync' using a clean environment to ensure isolation
+            subprocess.run(
+                ["uv", "sync"],
+                cwd=module_cwd,
+                check=True,
+                env=self._get_clean_env()
+            )
             logger.info(f"Environment for {module_name} synchronised successfully.")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to synchronise environment for {module_name}: {e}")
@@ -95,7 +114,6 @@ class DagheOrchestrator:
         data = self._load_manifest(module_name)
 
         # Prepare mapping for the Template engine
-        # Placeholders in templates (e.g. ${BASE_DIR}) are replaced here
         mapping = {
             "BASE_DIR": str(BASE_DIR),
             "NAME": data['module']['name'],
@@ -106,7 +124,7 @@ class DagheOrchestrator:
             "RANDOM_DELAY": data['schedule'].get('random_delay', "0s")
         }
 
-        # 1. Generate Bash Wrapper (the entrypoint caller)
+        # 1. Generate Bash Wrapper
         self._render("wrapper.sh.tmpl", GEN_DIR / f"run-{module_name}.sh", mapping, is_executable=True)
 
         # 2. Generate Systemd Service Unit
@@ -138,7 +156,7 @@ class DagheOrchestrator:
         Main installation pipeline:
         1. Setup environment -> 2. Generate configs -> 3. Symlink to system (if production)
         """
-        # Step 1: Automated environment setup (uv sync)
+        # Step 1: Automated environment setup (uv sync) with isolation
         self.setup_module_env(module_name)
 
         # Step 2: Config generation
@@ -154,7 +172,6 @@ class DagheOrchestrator:
             for unit in units:
                 src = SYSTEMD_REPO_DIR / unit
                 dst = ETC_SYSTEMD / unit
-                # Create an atomic symbolic link
                 subprocess.run(["sudo", "ln", "-sf", str(src), str(dst)], check=True)
 
             subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
@@ -175,10 +192,15 @@ class DagheOrchestrator:
         module_cwd = JOBS_DIR / module_name / "current"
         logger.info(f"Upgrading dependencies for {module_name}...")
 
+        clean_env = self._get_clean_env()
         for pkg in packages:
             logger.info(f"Requesting upgrade for package: {pkg}")
-            # 'uv add --upgrade' updates the package and all its dependencies in uv.lock
-            res = subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_cwd)
+            # Use clean environment to avoid venv inheritance
+            res = subprocess.run(
+                ["uv", "add", "--upgrade", pkg],
+                cwd=module_cwd,
+                env=clean_env
+            )
             if res.returncode == 0:
                 logger.info(f"Successfully upgraded {pkg}.")
             else:
@@ -198,15 +220,12 @@ def main():
     parser = argparse.ArgumentParser(description="DaGhE Orchestrator CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    # Command: install
     install_p = subparsers.add_parser("install", help="Setup environment and install systemd units")
-    install_p.add_argument("module", help="Name of the module (e.g. daghe-youtube-search-metadata)")
+    install_p.add_argument("module", help="Name of the module")
 
-    # Command: upgrade
     upgrade_p = subparsers.add_parser("upgrade", help="Force upgrade of specific Python packages via uv")
     upgrade_p.add_argument("module", help="Name of the module")
 
-    # Command: status
     subparsers.add_parser("status", help="Show systemd timer status")
 
     args = parser.parse_args()

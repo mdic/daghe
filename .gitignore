@@ -10,6 +10,11 @@ jobs/*/data/*
 !jobs/*/current/.gitkeep
 !jobs/*/data/.gitkeep
 
+# Ignore generated systemd files
+systemd/*.service
+systemd/*.timer
+
+
 # Ignore nested .git folders
 **.git/
 
