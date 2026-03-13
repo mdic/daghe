@@ -1,0 +1,10 @@
+module:
+  name: "daghe-check-updates"
+  description: "Automated maintenance job to upgrade dependencies of all DaGhE modules"
+  type: "bash"
+  entrypoint: "maintenance.sh"
+
+schedule:
+  # Esegui ogni lunedì alle 03:00 AM
+  calendar: "Mon *-*-* 03:00:00"
+  random_delay: "30m"

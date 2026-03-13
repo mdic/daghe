@@ -9,6 +9,8 @@ jobs/*/current/*
 jobs/*/data/*
 !jobs/*/current/.gitkeep
 !jobs/*/data/.gitkeep
+!jobs/daghe-check-updates/
+!jobs/daghe-check-updates/**
 
 # Ignore generated systemd files
 systemd/*.service
