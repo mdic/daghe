@@ -1,10 +1,11 @@
 [Unit]
-Description=DaGhE Modulo: ${DESCRIPTION}
+Description=DaGhE Module: ${DESCRIPTION}
 PartOf=default.target
 
 [Service]
 Type=oneshot
-# Ensure uv and standard binaries are in the PATH for the user session
-Environment="PATH=/usr/local/bin:/usr/bin:/bin:${BASE_DIR}/bin"
+# UK English: Dynamic Environment Injection
+# This ensures systemd inherits the exact PATH where uv is available
+Environment="PATH=${SESSION_PATH}"
 WorkingDirectory=${BASE_DIR}
 ExecStart=${BASE_DIR}/bin/generated/run-${NAME}.sh

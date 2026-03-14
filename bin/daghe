@@ -9,6 +9,7 @@ directory segments (e.g. /jobs/jobs/) and full module management.
 import argparse
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -156,13 +157,28 @@ class DagheOrchestrator:
             sys.exit(1)
 
     def generate_configs(self, module_name):
-        """Render templates into functional bash wrappers and systemd units."""
+        """
+        Render templates with Dynamic Environment Injection.
+        UK English: Captures the installer's environment to ensure systemd
+        can locate 'uv' and other essential binaries.
+        """
         name = self._sanitise_module_name(module_name)
         data = self._load_manifest(name)
+
+        # 1. Dynamic Discovery: find where 'uv' is located in the current session
+        uv_path = shutil.which("uv")
+        if not uv_path:
+            logger.error("Could not locate 'uv' binary in the current PATH.")
+            sys.exit(1)
+
+        # 2. Capture the current PATH to inject it into systemd
+        # This ensures the user-instance inherits the working environment
+        current_path = os.environ.get("PATH", "")
 
         proxy_section = data.get("proxy") or {}
         proxy_name = proxy_section.get("name", "")
 
+        # 3. Enhanced mapping with Environment variables
         mapping = {
             "BASE_DIR": str(BASE_DIR),
             "NAME": name,
@@ -172,6 +188,8 @@ class DagheOrchestrator:
             "CALENDAR": data["schedule"]["calendar"],
             "RANDOM_DELAY": data["schedule"].get("random_delay", "0s"),
             "PROXY_NAME": proxy_name,
+            "UV_BINARY": uv_path,  # Absolute path to uv
+            "SESSION_PATH": current_path,  # Full working PATH
         }
 
         self._render(

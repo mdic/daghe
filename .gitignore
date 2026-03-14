@@ -10,6 +10,7 @@ config/cookies/*.txt
 
 # Ignore job-specific operational payloads and data
 jobs/*
+!jobs/*/
 jobs/*/current/*
 jobs/*/data/*
 !jobs/*/current/.gitkeep
