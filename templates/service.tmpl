@@ -4,8 +4,6 @@ PartOf=default.target
 
 [Service]
 Type=oneshot
-# UK English: Dynamic Environment Injection
-# This ensures systemd inherits the exact PATH where uv is available
 Environment="PATH=${SESSION_PATH}"
 WorkingDirectory=${BASE_DIR}
 ExecStart=${BASE_DIR}/bin/generated/run-${NAME}.sh
