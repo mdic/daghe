@@ -3,63 +3,76 @@
 set -euo pipefail
 
 # 1. Environment Discovery and Initialisation
-# We define variables before any logic to satisfy 'set -u'
 SCRIPT_DIR="$$(cd "$$(dirname "$${BASH_SOURCE[0]}")" && pwd)"
 export BASE_DIR="$$(cd "$${SCRIPT_DIR}/../.." && pwd)"
 export PATH="${SESSION_PATH}"
 
+NAME="${NAME}"
 PROXY_NAME="${PROXY_NAME}"
 TUNNEL_PID=""
 
-# 2. Cleanup Function
-cleanup() {
-    # Using default value syntax ${VAR:-} to prevent unbound variable errors
+# --- ERROR NOTIFICATION LOGIC ---
+# This function sends a Telegram alert if the shell script crashes
+# before or during the Python execution.
+notify_failure() {
+    local exit_code=$$?
+    if [[ $$exit_code -ne 0 && $$exit_code -ne 130 ]]; then
+        echo "[$$({date})] $${NAME}: CRITICAL: Wrapper failed with exit code $$exit_code."
+        # Call the shared notify script directly
+        "$${BASE_DIR}/bin/telegram-notify.sh" "ERROR" "$${NAME}: Automation failed at system level (Exit code: $$exit_code). Check 'daghe logs $${NAME}' on VPS."
+    fi
+}
+# Trap ERR signals and script exits
+trap notify_failure EXIT
+# --------------------------------
+
+# 2. Cleanup Function (Modified to coexist with notify_failure)
+cleanup_tunnel() {
     if [[ -n "$${TUNNEL_PID:-}" ]]; then
-        echo "[$$({date})] ${NAME}: Shutting down proxy tunnel (PID: $$TUNNEL_PID)..."
+        echo "[$$({date})] $${NAME}: Shutting down proxy tunnel (PID: $$TUNNEL_PID)..."
         kill "$$TUNNEL_PID" 2>/dev/null || true
     fi
 }
-trap cleanup EXIT
+# Add cleanup to the existing EXIT trap (Bash allows multiple via functions)
+trap 'cleanup_tunnel; notify_failure' EXIT
 
 # 3. Proxy Management
 if [[ -n "$$PROXY_NAME" ]]; then
     PROXY_FILE="$${BASE_DIR}/config/proxies/$${PROXY_NAME}.env"
     if [[ -f "$$PROXY_FILE" ]]; then
         source "$$PROXY_FILE"
-        echo "[$$({date})] ${NAME}: Starting ephemeral tunnel: $$PROXY_NAME"
+        echo "[$$({date})] $${NAME}: Starting ephemeral tunnel: $$PROXY_NAME"
 
-        # Start the tunnel in the background
         $${PROXY_CMD} &
         TUNNEL_PID=$$!
 
-        # Wait for the local port to become active (timeout after 15 seconds)
         MAX_RETRIES=15
         COUNT=0
         while ! ss -lnt | grep -q ":$${PROXY_LOCAL_PORT} "; do
             sleep 1
             ((COUNT++))
             if [[ $$COUNT -ge $$MAX_RETRIES ]]; then
-                echo "[$$({date})] ${NAME}: ERROR: Tunnel failed to initialise on port $${PROXY_LOCAL_PORT}"
+                echo "[$$({date})] $${NAME}: ERROR: Tunnel failed to initialise."
                 exit 1
             fi
         done
-        echo "[$$({date})] ${NAME}: Tunnel ready on port $${PROXY_LOCAL_PORT}"
     else
-        echo "[$$({date})] ${NAME}: ERROR: Proxy config $$PROXY_FILE missing."
+        echo "[$$({date})] $${NAME}: ERROR: Proxy config missing."
         exit 1
     fi
 fi
 
 # 4. Locking & Execution
-LOCK_FILE="$${BASE_DIR}/state/${NAME}.lock"
+LOCK_FILE="$${BASE_DIR}/state/$${NAME}.lock"
 exec 9>"$$LOCK_FILE"
 if ! flock -n 9; then
-    echo "[$$({date})] ${NAME}: Already running, skipping."
+    echo "[$$({date})] $${NAME}: Already running, skipping."
+    # We exit with 0 here to avoid triggering the failure notification for a normal overlap
     exit 0
 fi
 
-cd "$${BASE_DIR}/jobs/${NAME}/current"
+cd "$${BASE_DIR}/jobs/$${NAME}/current"
 export PYTHONPATH="src"
 
-# Execute using the absolute path to uv discovered at install time
+# Execute using the absolute path to uv
 ${UV_BINARY} run python -m ${ENTRYPOINT} ${PARAMS}
