@@ -21,7 +21,11 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from core.manifest import get_manifest_path, load_manifest_file
+from core.manifest import (
+    ManifestEmptyError,
+    ManifestNotFoundError,
+    load_module_manifest,
+)
 from core.utils import sanitise_module_name
 
 try:
@@ -110,24 +114,17 @@ class DagheOrchestrator:
     def _load_manifest(self, module_name):
         """
         Load and parse the daghe-module.yaml for the specific module.
-        UK English: Manifest path and exit policy managed by CLI; parsing delegated to core.
+        UK English: Sanitisation managed by CLI; loading logic delegated to core.
+        Known manifest exceptions are caught to preserve legacy exit policy.
         """
         name = self._sanitise_module_name(module_name)
-        # Logic extracted to core library
-        manifest_path = get_manifest_path(JOBS_DIR, name)
 
-        if not manifest_path.exists():
-            logger.error(f"Manifest missing at: {manifest_path}")
+        try:
+            return load_module_manifest(JOBS_DIR, name)
+        except (ManifestNotFoundError, ManifestEmptyError) as e:
+            # Map library exceptions to the existing CLI error logging style
+            logger.error(str(e))
             sys.exit(1)
-
-        # Delegate parsing to the core library helper
-        data = load_manifest_file(manifest_path)
-
-        # If the file is empty or only contains comments, return None (legacy check)
-        if data is None:
-            logger.error(f"Manifest file is empty: {manifest_path}")
-            sys.exit(1)
-        return data
 
     def setup_module_env(self, module_name):
         """Initialise or synchronise the uv virtual environment for a Python module."""
