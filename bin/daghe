@@ -21,6 +21,7 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from core.execution import sync_module_venv
 from core.manifest import (
     ManifestEmptyError,
     ManifestNotFoundError,
@@ -117,17 +118,23 @@ class DagheOrchestrator:
         data = self._load_manifest(name)
         if data.get("module", {}).get("type") != "python":
             return
+
         module_cwd = JOBS_DIR / name / "current"
-        if not (module_cwd / "pyproject.toml").exists():
+        pyproject_path = module_cwd / "pyproject.toml"
+
+        if not pyproject_path.exists():
+            logger.warning(
+                f"No pyproject.toml found in {module_cwd}. Cannot sync environment."
+            )
             return
+
         logger.info(f"Synchronising uv environment for {name}...")
         try:
-            subprocess.run(
-                ["uv", "sync"], cwd=module_cwd, check=True, env=self._get_clean_env()
-            )
+            # Delegation to library; check_returncode ensures legacy exception-based flow
+            sync_module_venv(module_cwd).check_returncode()
             logger.info(f"Environment for {name} synchronised successfully.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to synchronise environment: {e}")
+            logger.error(f"Failed to synchronise environment for {name}: {e}")
             sys.exit(1)
 
     def generate_configs(self, module_name):
