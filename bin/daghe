@@ -26,6 +26,7 @@ from core.manifest import (
     ManifestNotFoundError,
     load_module_manifest,
 )
+from core.system import get_clean_env, get_user_bus_env
 from core.utils import sanitise_module_name
 
 try:
@@ -90,26 +91,17 @@ class DagheOrchestrator:
 
     def _get_clean_env(self):
         """
-        Returns a copy of environment variables stripped of Python/Venv specific
-        variables to prevent conflicts between orchestrator and module environments.
+        Returns a copy of environment variables stripped of Python-specific vars.
+        UK English spelling. Delegates to core.system for standardised isolation.
         """
-        env = os.environ.copy()
-        env.pop("VIRTUAL_ENV", None)
-        env.pop("PYTHONPATH", None)
-        env.pop("__PYVENV_LAUNCHER__", None)
-        return env
+        return get_clean_env()
 
     def _get_user_bus_env(self):
         """
         Calculates environment variables required to connect to the systemd user bus.
-        Essential for running systemctl --user commands in a service session.
+        Delegates to core.system for standardised bus discovery.
         """
-        env = self._get_clean_env()
-        uid = os.getuid()
-        runtime_dir = f"/run/user/{uid}"
-        env["XDG_RUNTIME_DIR"] = runtime_dir
-        env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime_dir}/bus"
-        return env
+        return get_user_bus_env()
 
     def _load_manifest(self, module_name):
         """
