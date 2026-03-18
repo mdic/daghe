@@ -15,16 +15,21 @@ import sys
 from pathlib import Path
 from string import Template
 
+# --- Dynamic Path Discovery ---
+SCRIPT_PATH = Path(__file__).resolve()
+BASE_DIR = SCRIPT_PATH.parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 import yaml
+
+from core.utils import sanitise_module_name
 
 try:
     import argcomplete
 except ImportError:
     argcomplete = None
 
-# --- Dynamic Path Discovery ---
-SCRIPT_PATH = Path(__file__).resolve()
-BASE_DIR = SCRIPT_PATH.parent.parent
 
 # Core sub-directories
 BIN_DIR = BASE_DIR / "bin"
@@ -76,12 +81,9 @@ class DagheOrchestrator:
     def _sanitise_module_name(self, input_name):
         """
         Cleans the input module name to prevent path duplication.
-        E.g. transforms 'jobs/daghe-test' or './daghe-test/' into 'daghe-test'.
+        Delegates to core.utils.sanitise_module_name for standardised logic.
         """
-        if not input_name:
-            return ""
-        # Get only the last part of the path and strip trailing slashes
-        return Path(input_name).name
+        return sanitise_module_name(input_name)
 
     def _get_clean_env(self):
         """
