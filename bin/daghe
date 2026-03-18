@@ -26,6 +26,7 @@ from core.manifest import (
     ManifestNotFoundError,
     load_module_manifest,
 )
+from core.modules import list_module_dirs, list_valid_modules
 from core.system import get_clean_env, get_user_bus_env
 from core.utils import sanitise_module_name
 
@@ -57,15 +58,7 @@ logger = logging.getLogger("daghe")
 
 
 def get_module_list(prefix, **kwargs):
-    """
-    Dynamic completer function for argcomplete.
-    Scans the jobs directory and returns folder names starting with 'daghe-'.
-    """
-    if not JOBS_DIR.exists():
-        return []
-    return [
-        d.name for d in JOBS_DIR.iterdir() if d.is_dir() and d.name.startswith("daghe-")
-    ]
+    return list_module_dirs(JOBS_DIR)
 
 
 class DagheOrchestrator:
@@ -280,7 +273,9 @@ class DagheOrchestrator:
                 env=self._get_user_bus_env(),
             )
         else:
-            logger.info(f"Status check for {BASE_DIR}")
+            logger.info(f"Status check for {BASE_DIR}. Registered modules:")
+            for name in list_valid_modules(JOBS_DIR):
+                logger.info(f" - {name}")
 
     def show_logs(self, module_name):
         """Helper to show both systemd journal and application log file."""
