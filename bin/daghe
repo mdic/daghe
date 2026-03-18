@@ -21,7 +21,7 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from core.execution import sync_module_venv
+from core.execution import sync_module_venv, upgrade_module_packages
 from core.manifest import (
     ManifestEmptyError,
     ManifestNotFoundError,
@@ -263,15 +263,20 @@ class DagheOrchestrator:
         logger.info(f"Initialised {name}")
 
     def upgrade_module(self, module_name):
+        """Perform automated dependency upgrades via 'uv add --upgrade'."""
         name = self._sanitise_module_name(module_name)
         data = self._load_manifest(name)
         packages = data.get("updates", {}).get("auto_upgrade_packages", [])
+
         if not packages:
+            # Gatekeeper logic preserved
             return
+
         module_cwd = JOBS_DIR / name / "current"
-        env = self._get_clean_env()
-        for pkg in packages:
-            subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_cwd, env=env)
+        logger.info(f"Upgrading dependencies for {name}...")
+
+        # Delegation of the execution loop to the library
+        upgrade_module_packages(module_cwd, packages)
 
     def status(self):
         """Display summary of active DaGhE timers."""
