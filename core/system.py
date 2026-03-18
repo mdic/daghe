@@ -1,4 +1,5 @@
 import os
+import subprocess
 from typing import Dict
 
 
@@ -34,3 +35,13 @@ def get_user_bus_env() -> Dict[str, str]:
     env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime_dir}/bus"
 
     return env
+
+
+def get_user_timers_status() -> subprocess.CompletedProcess:
+    """
+    Executes systemctl to display the status of DaGhE user timers.
+    UK English spelling. Streams output directly to the terminal and
+    returns the completed process result.
+    """
+    bus_env = get_user_bus_env()
+    return subprocess.run(["systemctl", "--user", "list-timers", "auto-*"], env=bus_env)

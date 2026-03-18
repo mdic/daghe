@@ -27,7 +27,7 @@ from core.manifest import (
     load_module_manifest,
 )
 from core.modules import list_module_dirs, list_valid_modules
-from core.system import get_clean_env, get_user_bus_env
+from core.system import get_clean_env, get_user_bus_env, get_user_timers_status
 from core.utils import sanitise_module_name
 
 try:
@@ -267,12 +267,12 @@ class DagheOrchestrator:
             subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_cwd, env=env)
 
     def status(self):
+        """Display summary of active DaGhE timers."""
         if self.is_production:
-            subprocess.run(
-                ["systemctl", "--user", "list-timers", "auto-*"],
-                env=self._get_user_bus_env(),
-            )
+            # Delegate system interrogation to the library
+            get_user_timers_status()
         else:
+            # Testing branch remains untouched as requested
             logger.info(f"Status check for {BASE_DIR}. Registered modules:")
             for name in list_valid_modules(JOBS_DIR):
                 logger.info(f" - {name}")
