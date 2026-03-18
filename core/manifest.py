@@ -12,3 +12,11 @@ def load_manifest_file(path: Path) -> Any:
     """
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def get_manifest_path(jobs_dir: Path, module_name: str) -> Path:
+    """
+    Construct the absolute path to a module's manifest file.
+    UK English spelling. Assumes module_name is already sanitised.
+    """
+    return jobs_dir / module_name / "current" / "daghe-module.yaml"

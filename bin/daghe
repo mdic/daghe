@@ -21,7 +21,7 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from core.manifest import load_manifest_file
+from core.manifest import get_manifest_path, load_manifest_file
 from core.utils import sanitise_module_name
 
 try:
@@ -113,7 +113,9 @@ class DagheOrchestrator:
         UK English: Manifest path and exit policy managed by CLI; parsing delegated to core.
         """
         name = self._sanitise_module_name(module_name)
-        manifest_path = JOBS_DIR / name / "current" / "daghe-module.yaml"
+        # Logic extracted to core library
+        manifest_path = get_manifest_path(JOBS_DIR, name)
+
         if not manifest_path.exists():
             logger.error(f"Manifest missing at: {manifest_path}")
             sys.exit(1)
