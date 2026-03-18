@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""
+DaGhE (dgh) Thin Wrapper
+UK English spelling.
+Redirects all execution to the original bin/daghe entrypoint.
+"""
+import os
+import sys
+from pathlib import Path
+
+# Path to the original, untouched entrypoint
+ORIGINAL_CLI = Path(__file__).parent / "daghe"
+
+def main():
+    # os.execv replaces the current process with the original script.
+    # We pass sys.executable (the path to the current python/venv)
+    # followed by the script path and all received arguments.
+    os.execv(sys.executable, [sys.executable, str(ORIGINAL_CLI)] + sys.argv[1:])
+
+if __name__ == "__main__":
+    main()
