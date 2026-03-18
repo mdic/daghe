@@ -26,7 +26,7 @@ from core.manifest import (
     ManifestNotFoundError,
     load_module_manifest,
 )
-from core.modules import list_module_dirs, list_valid_modules
+from core.modules import get_testing_status_names, list_module_dirs
 from core.system import get_clean_env, get_user_bus_env, get_user_timers_status
 from core.utils import sanitise_module_name
 
@@ -274,7 +274,7 @@ class DagheOrchestrator:
         else:
             # Testing branch remains untouched as requested
             logger.info(f"Status check for {BASE_DIR}. Registered modules:")
-            for name in list_valid_modules(JOBS_DIR):
+            for name in get_testing_status_names(JOBS_DIR):
                 logger.info(f" - {name}")
 
     def show_logs(self, module_name):

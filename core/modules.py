@@ -28,3 +28,11 @@ def list_valid_modules(jobs_dir: Path) -> List[str]:
         if manifest_path.exists():
             valid.append(name)
     return valid
+
+
+def get_testing_status_names(jobs_dir: Path) -> List[str]:
+    """
+    Returns the names of valid modules for testing-mode status reporting.
+    UK English spelling. Delegates to internal validation logic.
+    """
+    return list_valid_modules(jobs_dir)
