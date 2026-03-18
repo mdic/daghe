@@ -22,3 +22,12 @@ def upgrade_module_packages(module_path: Path, packages: List[str]) -> None:
     for pkg in packages:
         # Matches legacy behaviour: executes without forced check=True
         subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_path, env=env)
+
+
+def run_wrapper_script(wrapper_path: Path) -> subprocess.CompletedProcess:
+    """
+    Executes a generated module wrapper script.
+    UK English spelling. Streams output directly to the terminal.
+    """
+    env = get_clean_env()
+    return subprocess.run([str(wrapper_path)], env=env)

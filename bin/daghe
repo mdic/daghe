@@ -21,7 +21,11 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from core.execution import sync_module_venv, upgrade_module_packages
+from core.execution import (
+    run_wrapper_script,
+    sync_module_venv,
+    upgrade_module_packages,
+)
 from core.manifest import (
     ManifestEmptyError,
     ManifestNotFoundError,
@@ -308,11 +312,16 @@ class DagheOrchestrator:
         """Executes the module wrapper directly to see live output."""
         name = self._sanitise_module_name(module_name)
         wrapper = GEN_DIR / f"run-{name}.sh"
+
+        # CLI Gatekeeper logic remains here
         if not wrapper.exists():
-            logger.error("Run 'install' first.")
+            logger.error(f"Wrapper not found: {wrapper}. Run 'install' first.")
             return
+
         logger.info(f"Executing {name} live...")
-        subprocess.run([str(wrapper)], env=self._get_clean_env())
+
+        # Delegation of the actual subprocess call to the library
+        run_wrapper_script(wrapper)
 
     def setup_ssh(self):
         """Initialises SSH environment for GitHub integration."""
