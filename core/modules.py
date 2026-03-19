@@ -36,3 +36,11 @@ def get_testing_status_names(jobs_dir: Path) -> List[str]:
     UK English spelling. Delegates to internal validation logic.
     """
     return list_valid_modules(jobs_dir)
+
+
+def get_module_log_path(log_dir: Path, module_name: str) -> Path:
+    """
+    UK English: Resolves the expected log file path for a sanitised module name.
+    Preserves the legacy convention of stripping the 'daghe-' prefix.
+    """
+    return log_dir / f"{module_name.replace('daghe-', '')}.log"

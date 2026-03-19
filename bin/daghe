@@ -31,8 +31,17 @@ from core.manifest import (
     ManifestNotFoundError,
     load_module_manifest,
 )
-from core.modules import get_testing_status_names, list_module_dirs
-from core.system import get_clean_env, get_user_bus_env, get_user_timers_status
+from core.modules import (
+    get_module_log_path,  # Added
+    get_testing_status_names,
+    list_module_dirs,
+)
+from core.system import (
+    get_clean_env,
+    get_user_bus_env,
+    get_user_timers_status,
+    stream_user_journal,  # Added
+)
 from core.utils import sanitise_module_name
 
 try:
@@ -296,14 +305,18 @@ class DagheOrchestrator:
     def show_logs(self, module_name):
         """Helper to show both systemd journal and application log file."""
         name = self._sanitise_module_name(module_name)
+
+        # 1. Systemd Journal Section
         logger.info(f"--- Systemd Journal for {name} ---")
-        bus_env = self._get_user_bus_env()
-        subprocess.run(
-            ["journalctl", "--user", "-u", f"auto-{name}", "-n", "20"], env=bus_env
-        )
-        app_log = LOG_DIR / f"{name}.log"
+        # Delegate journal streaming to library; CLI maintains unit prefix knowledge
+        stream_user_journal(f"auto-{name}", lines=20)
+
+        # 2. Application Log Section
+        # Delegate path construction to library; CLI maintains existence check logic
+        app_log = get_module_log_path(LOG_DIR, name)
+
         if app_log.exists():
-            logger.info(f"--- Application Log: {app_log} ---")
+            logger.info(f"--- Application Log File: {app_log} ---")
             subprocess.run(["tail", "-n", "20", str(app_log)])
         else:
             logger.info(f"No application log file found at {app_log}")

@@ -45,3 +45,14 @@ def get_user_timers_status() -> subprocess.CompletedProcess:
     """
     bus_env = get_user_bus_env()
     return subprocess.run(["systemctl", "--user", "list-timers", "auto-*"], env=bus_env)
+
+
+def stream_user_journal(unit_name: str, lines: int = 20) -> subprocess.CompletedProcess:
+    """
+    UK English: Streams the last N lines of a systemd user unit journal to stdout.
+    Utilises the standardised user-bus environment.
+    """
+    env = get_user_bus_env()
+    return subprocess.run(
+        ["journalctl", "--user", "-u", unit_name, "-n", str(lines)], env=env
+    )
