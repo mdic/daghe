@@ -1,6 +1,7 @@
 import fcntl
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -51,29 +52,28 @@ def read_state(state_dir: Path, module_name: str) -> Optional[Dict[str, Any]]:
 
 def is_module_running(state_dir: Path, module_name: str) -> bool:
     """
-    UK English: Checks if a module is currently running by testing the lockfile.
+    UK English: Checks if a module is running by probing the exclusion lock.
+    Returns True if the lock is held by any active process in the chain.
     """
     lock_path = state_dir / f"{module_name}.lock"
     if not lock_path.exists():
         return False
 
-    f = None
+    fd = None
     try:
-        # Open for reading without creating the file if it's gone
-        f = open(lock_path, "r")
+        # Open the lockfile for probing
+        fd = os.open(lock_path, os.O_RDONLY)
         # Attempt to acquire an exclusive non-blocking lock
-        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-        # If we reach here, we GOT the lock, meaning NO ONE ELSE has it
-        fcntl.flock(f, fcntl.LOCK_UN)
+        # If we reach here, we acquired the lock: the module is IDLE
+        fcntl.flock(fd, fcntl.LOCK_UN)
         return False
     except (BlockingIOError, IOError):
-        # Lock is currently held by an active process
+        # Lock is held: the module is RUNNING
         return True
-    except FileNotFoundError:
-        return False
     except Exception:
         return False
     finally:
-        if f:
-            f.close()
+        if fd is not None:
+            os.close(fd)

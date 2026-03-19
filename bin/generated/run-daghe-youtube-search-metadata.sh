@@ -63,16 +63,17 @@ if [[ -n "$PROXY_NAME" ]]; then
 fi
 
 # 4. Locking & Execution
-LOCK_FILE="${BASE_DIR}/state/${NAME}.lock"
+LOCK_FILE="/home/deek/git_repos/daghe-refactor/state/daghe-youtube-search-metadata.lock"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-    echo "[$({date})] ${NAME}: Already running, skipping."
-    # We exit with 0 here to avoid triggering the failure notification for a normal overlap
+    echo "[$(date)] daghe-youtube-search-metadata: Already running, skipping."
     exit 0
 fi
 
-cd "${BASE_DIR}/jobs/${NAME}/current"
+cd "/home/deek/git_repos/daghe-refactor/jobs/daghe-youtube-search-metadata/current"
 export PYTHONPATH="src"
 
-# Execute using the absolute path to uv
-/home/deek/.local/bin/uv run python -m youtube_search_metadata.cli --config config/job.yaml
+# UK English: Use 'exec' to replace the shell with the payload.
+# This ensures the payload inherits the lock-holding FD (9) and
+# that the lock is released exactly when the payload terminates.
+exec /home/deek/.local/bin/uv run python -m youtube_search_metadata.cli --config config/job.yaml
