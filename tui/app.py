@@ -1,4 +1,5 @@
 import os
+import subprocess  # Added for narrow exception handling
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,20 +10,17 @@ BASE_DIR = SCRIPT_PATH.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from textual import work  # For threaded workers
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Footer, Header, Label, ListItem, ListView, Static
 
-from core.execution import (  # Maintenance helpers
-    sync_module_venv,
-    upgrade_module_packages,
-)
+from core.execution import sync_module_venv, upgrade_module_packages
 from core.manifest import ManifestError, load_module_manifest
-from core.modules import get_testing_status_names, list_valid_modules
+from core.modules import list_valid_modules
 from core.state import read_state, write_state
-from core.system import get_user_timers_status, stream_user_journal
+from core.system import stream_user_journal
 
 # Standard DaGhE Paths
 JOBS_DIR = BASE_DIR / "jobs"
@@ -31,8 +29,6 @@ PRODUCTION_PATH = Path("/opt/daghe")
 
 
 class ModuleItem(ListItem):
-    """Custom list item to hold module name reference."""
-
     def __init__(self, module_name: str) -> None:
         super().__init__(Label(module_name))
         self.module_name = module_name
@@ -40,8 +36,8 @@ class ModuleItem(ListItem):
 
 class DagheTUI(App):
     """
-    DaGhE TUI Dashboard - Batch 3.4
-    UK English spelling. Implements non-blocking maintenance workers.
+    DaGhE TUI Dashboard - Batch 3.5
+    UK English spelling. Refined non-blocking interaction model.
     """
 
     TITLE = "DaGhE Automation"
@@ -56,7 +52,7 @@ class DagheTUI(App):
 
     def __init__(self):
         super().__init__()
-        self.is_busy = False  # Prevent duplicate triggers
+        self.is_busy = False
 
     def compose(self) -> ComposeResult:
         is_prod = BASE_DIR == PRODUCTION_PATH
@@ -76,9 +72,7 @@ class DagheTUI(App):
                 yield Static(id="module-status")
 
                 yield Label("MAINTENANCE ACTIONS", classes="section-title")
-                yield Label(
-                    "Idle", id="action-status"
-                )  # Real action status (Batch 3.4)
+                yield Label("Idle", id="action-status")
 
                 yield Label("LATEST LOGS", classes="section-title")
                 yield Static(id="module-logs")
@@ -88,7 +82,6 @@ class DagheTUI(App):
         self.action_refresh_all()
 
     def action_refresh_all(self) -> None:
-        """UK English: Refresh both the list and the details of the selection."""
         list_view = self.query_one("#module-list", ListView)
         current_selection = None
         if list_view.highlighted_child:
@@ -103,11 +96,11 @@ class DagheTUI(App):
             self.update_view(current_selection)
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Fix 1: Always update the view on navigation, regardless of busy state."""
         if event.item:
             self.update_view(event.item.module_name)
 
     def update_view(self, module_name: str) -> None:
-        """UK English: Orchestrates the update of the detail and status panels."""
         self.update_detail_view(module_name)
         self.update_status_view(module_name)
         self.update_logs_view(module_name)
@@ -155,24 +148,18 @@ class DagheTUI(App):
         status_static.add_class(f"status-{outcome}")
 
     def update_logs_view(self, module_name: str) -> None:
-        """Correction: Removed broad exception, added returncode check and [code] tag."""
         logs_static = self.query_one("#module-logs", Static)
         unit_name = f"auto-{module_name}.service"
 
         res = stream_user_journal(unit_name, lines=30, capture=True)
-
         if res.returncode != 0:
             logs_static.update("[red]Error:[/red] Failed to retrieve systemd journal.")
             return
 
         if res.stdout and res.stdout.strip():
-            logs_static.update(
-                f"[code]{res.stdout}[/code]"
-            )  # Correction: preserve formatting
+            logs_static.update(f"[code]{res.stdout}[/code]")
         else:
             logs_static.update("No recent journal entries found.")
-
-    # --- BATCH 3.4: WORKERS & ACTIONS ---
 
     def action_sync_env(self) -> None:
         self.run_maintenance("sync")
@@ -181,7 +168,6 @@ class DagheTUI(App):
         self.run_maintenance("upgrade")
 
     def run_maintenance(self, action_type: str) -> None:
-        """UK English: Standardised trigger logic for maintenance tasks."""
         list_view = self.query_one("#module-list", ListView)
         if not list_view.highlighted_child or self.is_busy:
             return
@@ -191,45 +177,49 @@ class DagheTUI(App):
 
     @work(thread=True)
     def execute_worker(self, module_name: str, action_type: str) -> None:
-        """UK English: Thread-based worker to prevent UI blocking."""
+        """UK English: Refined worker logic with precise outcome reporting."""
         self.is_busy = True
         status_label = self.query_one("#action-status", Label)
         module_cwd = JOBS_DIR / module_name / "current"
 
-        # Update UI to running state
-        self.call_from_thread(
-            status_label.update, f"[yellow]Running {action_type}...[/yellow]"
-        )
+        # Fix 3: Added visual "busy" class and clear running state
+        self.call_from_thread(status_label.add_class, "busy")
+        self.call_from_thread(status_label.update, f"Running {action_type}...")
 
         start_time = datetime.now(timezone.utc).isoformat()
+        final_msg = ""
+
         try:
             if action_type == "sync":
                 res = sync_module_venv(module_cwd, capture=True)
                 success = res.returncode == 0
+                exit_code = res.returncode
                 summary = (
                     "Manual TUI Sync completed."
                     if success
                     else "Manual TUI Sync failed."
                 )
-                exit_code = res.returncode
             else:
-                # Upgrade logic
                 manifest = load_module_manifest(JOBS_DIR, module_name)
                 packages = manifest.get("updates", {}).get("auto_upgrade_packages", [])
                 if not packages:
-                    success, exit_code, summary = True, 0, "No packages to upgrade."
+                    success, exit_code, summary = (
+                        True,
+                        0,
+                        "No packages defined to upgrade.",
+                    )
                 else:
                     success = upgrade_module_packages(
                         module_cwd, packages, capture=True
                     )
                     exit_code = 0 if success else 1
                     summary = (
-                        "Manual TUI Upgrade completed."
+                        "Manual TUI Upgrade finished."
                         if success
                         else "One or more packages failed."
                     )
 
-            # Update persistent state
+            # Persist the result
             outcome = "success" if success else "failure"
             state_payload = {
                 "module": module_name,
@@ -243,15 +233,23 @@ class DagheTUI(App):
             }
             write_state(STATE_DIR, module_name, state_payload)
 
-        except Exception as e:
-            self.call_from_thread(status_label.update, f"[red]Error: {str(e)}[/red]")
+            # Prepare final message for the UI
+            color = "green" if success else "red"
+            final_msg = f"[{color}]{summary}[/{color}]"
+
+        # Fix 2: Narrower exception handling
+        except (ManifestError, subprocess.SubprocessError, OSError) as e:
+            final_msg = f"[red]System Error: {type(e).__name__}[/red]"
+
         finally:
             self.is_busy = False
-            # Refresh UI components
-            self.call_from_thread(status_label.update, f"Last {action_type} finished.")
+            self.call_from_thread(status_label.remove_class, "busy")
+            # Fix 3: Ensure final message reflects actual outcome, not generic "finished"
+            if final_msg:
+                self.call_from_thread(status_label.update, final_msg)
+            # Fix 4: Preserve post-completion refresh
             self.call_from_thread(self.update_view, module_name)
 
 
 if __name__ == "__main__":
-    app = DagheTUI()
-    app.run()
+    DagheTUI().run()

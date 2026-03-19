@@ -78,3 +78,10 @@ Screen {
     border: inner #3b4261;
     width: 100%;
 }
+
+/* Added in Batch 3.5: Visual busy style */
+#action-status.busy {
+    background: #24283b;
+    color: #e0af68;
+    border: inner #e0af68;
+}
