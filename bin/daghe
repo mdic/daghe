@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from string import Template
 
@@ -36,6 +37,7 @@ from core.modules import (
     get_testing_status_names,
     list_module_dirs,
 )
+from core.state import write_state
 from core.system import (
     get_clean_env,
     get_user_bus_env,
@@ -282,14 +284,40 @@ class DagheOrchestrator:
         packages = data.get("updates", {}).get("auto_upgrade_packages", [])
 
         if not packages:
-            # Gatekeeper logic preserved
             return
 
         module_cwd = JOBS_DIR / name / "current"
         logger.info(f"Upgrading dependencies for {name}...")
 
-        # Delegation of the execution loop to the library
-        upgrade_module_packages(module_cwd, packages)
+        # Timezone-aware UTC timestamps
+        start_time = datetime.now(timezone.utc).isoformat()
+
+        # Capture success boolean from library
+        success = upgrade_module_packages(module_cwd, packages)
+
+        end_time = datetime.now(timezone.utc).isoformat()
+
+        if success:
+            outcome = "success"
+            summary = f"Successfully upgraded {len(packages)} packages."
+            exit_code = 0
+        else:
+            outcome = "failure"
+            summary = "One or more packages failed to upgrade."
+            exit_code = 1
+            logger.error(summary)
+
+        state_payload = {
+            "module": name,
+            "last_run": {
+                "start": start_time,
+                "end": end_time,
+                "exit_code": exit_code,
+                "outcome": outcome,
+                "summary": summary,
+            },
+        }
+        write_state(STATE_DIR, name, state_payload)
 
     def status(self):
         """Display summary of active DaGhE timers."""

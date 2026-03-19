@@ -13,15 +13,19 @@ def sync_module_venv(module_path: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["uv", "sync"], cwd=module_path, env=get_clean_env())
 
 
-def upgrade_module_packages(module_path: Path, packages: List[str]) -> None:
+def upgrade_module_packages(module_path: Path, packages: List[str]) -> bool:
     """
     Upgrades specific packages within a module's uv environment.
-    UK English spelling. Iterates through the package list and runs 'uv add --upgrade'.
+    UK English spelling. Returns True if all packages succeeded, False otherwise.
     """
     env = get_clean_env()
+    all_success = True
     for pkg in packages:
-        # Matches legacy behaviour: executes without forced check=True
-        subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_path, env=env)
+        # Executes without check=True to allow all packages to be attempted
+        res = subprocess.run(["uv", "add", "--upgrade", pkg], cwd=module_path, env=env)
+        if res.returncode != 0:
+            all_success = False
+    return all_success
 
 
 def run_wrapper_script(wrapper_path: Path) -> subprocess.CompletedProcess:
