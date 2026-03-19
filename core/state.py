@@ -53,7 +53,7 @@ def read_state(state_dir: Path, module_name: str) -> Optional[Dict[str, Any]]:
 def is_module_running(state_dir: Path, module_name: str) -> bool:
     """
     UK English: Checks if a module is running by probing the exclusion lock.
-    Returns True if the lock is held by any active process in the chain.
+    Utilises non-blocking flock. Hardened to prevent silent false-idle reporting.
     """
     lock_path = state_dir / f"{module_name}.lock"
     if not lock_path.exists():
@@ -61,19 +61,20 @@ def is_module_running(state_dir: Path, module_name: str) -> bool:
 
     fd = None
     try:
-        # Open the lockfile for probing
+        # Open for reading only
         fd = os.open(lock_path, os.O_RDONLY)
-        # Attempt to acquire an exclusive non-blocking lock
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-        # If we reach here, we acquired the lock: the module is IDLE
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        try:
+            # Attempt to acquire an exclusive non-blocking lock
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # If we reach here, we acquired the lock: the module is IDLE
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return False
+        except (BlockingIOError, IOError):
+            # BlockingIOError (or IOError on some kernels) indicates the lock is held
+            return True
+        finally:
+            if fd is not None:
+                os.close(fd)
+    except FileNotFoundError:
+        # The lockfile was removed between the exists check and the open call
         return False
-    except (BlockingIOError, IOError):
-        # Lock is held: the module is RUNNING
-        return True
-    except Exception:
-        return False
-    finally:
-        if fd is not None:
-            os.close(fd)
