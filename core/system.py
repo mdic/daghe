@@ -37,22 +37,32 @@ def get_user_bus_env() -> Dict[str, str]:
     return env
 
 
-def get_user_timers_status() -> subprocess.CompletedProcess:
+def get_user_timers_status(capture: bool = False) -> subprocess.CompletedProcess:
     """
     Executes systemctl to display the status of DaGhE user timers.
     UK English spelling. Streams output directly to the terminal and
     returns the completed process result.
     """
     bus_env = get_user_bus_env()
-    return subprocess.run(["systemctl", "--user", "list-timers", "auto-*"], env=bus_env)
+    return subprocess.run(
+        ["systemctl", "--user", "list-timers", "auto-*"],
+        env=bus_env,
+        capture_output=capture,
+        text=capture,
+    )
 
 
-def stream_user_journal(unit_name: str, lines: int = 20) -> subprocess.CompletedProcess:
+def stream_user_journal(
+    unit_name: str, lines: int = 20, capture: bool = False
+) -> subprocess.CompletedProcess:
     """
     UK English: Streams the last N lines of a systemd user unit journal to stdout.
     Utilises the standardised user-bus environment.
     """
-    env = get_user_bus_env()
+    bus_env = get_user_bus_env()
     return subprocess.run(
-        ["journalctl", "--user", "-u", unit_name, "-n", str(lines)], env=env
+        ["journalctl", "--user", "-u", unit_name, "-n", str(lines)],
+        env=bus_env,
+        capture_output=capture,
+        text=capture,
     )
