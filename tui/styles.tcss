@@ -79,9 +79,18 @@ Screen {
     width: 100%;
 }
 
-/* Added in Batch 3.5: Visual busy style */
 #action-status.busy {
     background: #24283b;
     color: #e0af68;
     border: inner #e0af68;
+}
+
+.live-running {
+    color: #e0af68; /* Yellow/Orange */
+    text-style: bold;
+}
+
+.live-idle {
+    color: #565f89; /* Muted Blue/Grey */
+    text-style: none;
 }

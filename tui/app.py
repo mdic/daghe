@@ -123,21 +123,31 @@ class DagheTUI(App):
             detail_static.update(f"[red]Error:[/red] {str(e)}")
 
     def update_status_view(self, module_name: str) -> None:
-        """UK English: Fetches health pulse and checks for active lockfiles."""
+        """UK English: Fetches health pulse and applies semantic status classes."""
         status_static = self.query_one("#module-status", Static)
-        status_static.remove_class("status-success", "status-failure", "status-empty")
 
-        # 1. Determine running state (Batch 3.6)
+        # Clear all potential dynamic classes to prevent stale states
+        status_static.remove_class(
+            "status-success",
+            "status-failure",
+            "status-empty",
+            "live-running",
+            "live-idle",
+        )
+
+        # 1. Determine running state (Semantic CSS only)
         is_running = is_module_running(STATE_DIR, module_name)
-        live_label = "[b][yellow]Running now[/yellow][/b]" if is_running else "Idle"
+        live_text = "Running now" if is_running else "Idle"
+        live_class = "live-running" if is_running else "live-idle"
 
         state = read_state(STATE_DIR, module_name)
 
         if not state:
             status_static.update(
-                f"Live Status: {live_label}\n\nNo run information available yet"
+                f"Live Status: {live_text}\n\nNo run information available yet"
             )
             status_static.add_class("status-empty")
+            status_static.add_class(live_class)
             return
 
         last_run = state.get("last_run", {})
@@ -145,18 +155,20 @@ class DagheTUI(App):
         if outcome not in ("success", "failure"):
             outcome = "empty"
 
+        # Build plain text content (Styling moved to TCSS)
         content = [
-            f"Live Status: {live_label}",
+            f"Live Status: {live_text}",
             "",
-            f"[bold]Last Outcome:[/bold] {outcome.upper()}",
-            f"[bold]Exit Code:[/bold] {last_run.get('exit_code', 'N/A')}",
-            f"[bold]Start (UTC):[/bold] {last_run.get('start', 'N/A')}",
-            f"[bold]End (UTC):[/bold] {last_run.get('end', 'N/A')}",
-            f"[bold]Summary:[/bold] {last_run.get('summary', 'N/A')}",
+            f"Last Outcome: {outcome.upper()}",
+            f"Exit Code: {last_run.get('exit_code', 'N/A')}",
+            f"Start (UTC): {last_run.get('start', 'N/A')}",
+            f"End (UTC): {last_run.get('end', 'N/A')}",
+            f"Summary: {last_run.get('summary', 'N/A')}",
         ]
 
         status_static.update("\n".join(content))
         status_static.add_class(f"status-{outcome}")
+        status_static.add_class(live_class)  # Apply the corrected live class
 
     def update_logs_view(self, module_name: str) -> None:
         logs_static = self.query_one("#module-logs", Static)
