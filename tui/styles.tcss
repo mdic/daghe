@@ -36,13 +36,13 @@ Screen {
 
 /* Sidebar Indicator Styling */
 .running-marker {
-    display: none;
+    visibility: hidden;
     color: #e0af68;
     text-style: bold;
 }
 
 .running-active .running-marker {
-    display: block;
+    visibility: visible;
 }
 
 /* Optional TCSS Refinement: Blinking effect for the indicator */
@@ -100,6 +100,12 @@ Screen {
     background: #24283b;
     color: #e0af68;
     border: inner #e0af68;
+}
+
+/* Action Error Styling */
+.action-error {
+    color: #f7768e; /* Fix 4: Red for blocked actions */
+    text-style: bold;
 }
 
 .live-running {

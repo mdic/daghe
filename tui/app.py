@@ -32,15 +32,14 @@ class ModuleItem(ListItem):
     """UK English: Custom item containing the module name and a status marker."""
 
     def __init__(self, module_name: str, is_active: bool) -> None:
-        super().__init__()
+        # Fix 1: Assign classes in constructor instead of compose()
+        cls = "running-active" if is_active else ""
+        super().__init__(classes=cls)
         self.module_name = module_name
-        self.is_active = is_active
 
     def compose(self) -> ComposeResult:
         yield Label(" • ", classes="running-marker")
         yield Label(self.module_name)
-        if self.is_active:
-            self.add_class("running-active")
 
 
 class DagheTUI(App):
@@ -91,22 +90,20 @@ class DagheTUI(App):
         self.action_refresh_all()
 
     def action_refresh_all(self) -> None:
-        """UK English: Unified refresh path for the entire TUI state."""
+        """UK English: Unified refresh path with index safety."""
         list_view = self.query_one("#module-list", ListView)
-
-        # Save focus index
         current_index = list_view.index
 
         list_view.clear()
         modules = list_valid_modules(JOBS_DIR)
         for name in modules:
-            # Item 1: Sidebar indicator logic
             active = is_module_running(STATE_DIR, name)
             list_view.append(ModuleItem(name, active))
 
-        # Restore focus and update details
+        # Fix 3: Index safety and clamping
         if modules:
-            list_view.index = current_index if current_index is not None else 0
+            safe_index = current_index if current_index is not None else 0
+            list_view.index = max(0, min(safe_index, len(modules) - 1))
             selected_name = list_view.highlighted_child.module_name
             self.update_view(selected_name)
 
@@ -206,7 +203,7 @@ class DagheTUI(App):
         self.run_maintenance("upgrade")
 
     def run_maintenance(self, action_type: str) -> None:
-        """UK English: Hardened trigger with manifest validation."""
+        """UK English: Hardened trigger with semantic error styling."""
         list_view = self.query_one("#module-list", ListView)
         status_label = self.query_one("#action-status", Label)
 
@@ -215,11 +212,13 @@ class DagheTUI(App):
 
         module_name = list_view.highlighted_child.module_name
 
-        # Item 3: Manifest-error action hardening
+        # Fix 4: Remove inline styling, use semantic classes
+        status_label.remove_class("action-error")
         try:
             load_module_manifest(JOBS_DIR, module_name)
         except ManifestError:
-            status_label.update("[red]Error: Invalid manifest. Action blocked.[/red]")
+            status_label.update("Error: Invalid manifest. Action blocked.")
+            status_label.add_class("action-error")
             return
 
         self.execute_worker(module_name, action_type)
