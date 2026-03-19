@@ -19,7 +19,7 @@ from textual.widgets import Footer, Header, Label, ListItem, ListView, Static
 from core.execution import sync_module_venv, upgrade_module_packages
 from core.manifest import ManifestError, load_module_manifest
 from core.modules import list_valid_modules
-from core.state import read_state, write_state
+from core.state import is_module_running, read_state, write_state
 from core.system import stream_user_journal
 
 # Standard DaGhE Paths
@@ -123,12 +123,20 @@ class DagheTUI(App):
             detail_static.update(f"[red]Error:[/red] {str(e)}")
 
     def update_status_view(self, module_name: str) -> None:
+        """UK English: Fetches health pulse and checks for active lockfiles."""
         status_static = self.query_one("#module-status", Static)
         status_static.remove_class("status-success", "status-failure", "status-empty")
 
+        # 1. Determine running state (Batch 3.6)
+        is_running = is_module_running(STATE_DIR, module_name)
+        live_label = "[b][yellow]Running now[/yellow][/b]" if is_running else "Idle"
+
         state = read_state(STATE_DIR, module_name)
+
         if not state:
-            status_static.update("No run information available yet")
+            status_static.update(
+                f"Live Status: {live_label}\n\nNo run information available yet"
+            )
             status_static.add_class("status-empty")
             return
 
@@ -138,12 +146,15 @@ class DagheTUI(App):
             outcome = "empty"
 
         content = [
-            f"[bold]Outcome:[/bold] {outcome.upper()}",
+            f"Live Status: {live_label}",
+            "",
+            f"[bold]Last Outcome:[/bold] {outcome.upper()}",
             f"[bold]Exit Code:[/bold] {last_run.get('exit_code', 'N/A')}",
             f"[bold]Start (UTC):[/bold] {last_run.get('start', 'N/A')}",
             f"[bold]End (UTC):[/bold] {last_run.get('end', 'N/A')}",
             f"[bold]Summary:[/bold] {last_run.get('summary', 'N/A')}",
         ]
+
         status_static.update("\n".join(content))
         status_static.add_class(f"status-{outcome}")
 
