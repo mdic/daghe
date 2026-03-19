@@ -34,6 +34,23 @@ Screen {
     color: #9ece6a;
 }
 
+/* Sidebar Indicator Styling */
+.running-marker {
+    display: none;
+    color: #e0af68;
+    text-style: bold;
+}
+
+.running-active .running-marker {
+    display: block;
+}
+
+/* Optional TCSS Refinement: Blinking effect for the indicator */
+.running-active {
+    text-style: italic;
+    background: $boost;
+}
+
 /* Status Panel Styling */
 #module-status {
     background: $boost;

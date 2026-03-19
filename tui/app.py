@@ -29,9 +29,18 @@ PRODUCTION_PATH = Path("/opt/daghe")
 
 
 class ModuleItem(ListItem):
-    def __init__(self, module_name: str) -> None:
-        super().__init__(Label(module_name))
+    """UK English: Custom item containing the module name and a status marker."""
+
+    def __init__(self, module_name: str, is_active: bool) -> None:
+        super().__init__()
         self.module_name = module_name
+        self.is_active = is_active
+
+    def compose(self) -> ComposeResult:
+        yield Label(" • ", classes="running-marker")
+        yield Label(self.module_name)
+        if self.is_active:
+            self.add_class("running-active")
 
 
 class DagheTUI(App):
@@ -62,7 +71,7 @@ class DagheTUI(App):
         yield Header()
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Label("  INSTALLED MODULES", classes="section-title")
+                yield Label("  MODULES", classes="section-title")
                 yield ListView(id="module-list")
             with ScrollableContainer(id="detail-area"):
                 yield Label(f"Current Mode: {mode_str}", classes=mode_class)
@@ -82,25 +91,31 @@ class DagheTUI(App):
         self.action_refresh_all()
 
     def action_refresh_all(self) -> None:
+        """UK English: Unified refresh path for the entire TUI state."""
         list_view = self.query_one("#module-list", ListView)
-        current_selection = None
-        if list_view.highlighted_child:
-            current_selection = list_view.highlighted_child.module_name
+
+        # Save focus index
+        current_index = list_view.index
 
         list_view.clear()
         modules = list_valid_modules(JOBS_DIR)
         for name in modules:
-            list_view.append(ModuleItem(name))
+            # Item 1: Sidebar indicator logic
+            active = is_module_running(STATE_DIR, name)
+            list_view.append(ModuleItem(name, active))
 
-        if current_selection:
-            self.update_view(current_selection)
+        # Restore focus and update details
+        if modules:
+            list_view.index = current_index if current_index is not None else 0
+            selected_name = list_view.highlighted_child.module_name
+            self.update_view(selected_name)
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Fix 1: Always update the view on navigation, regardless of busy state."""
         if event.item:
             self.update_view(event.item.module_name)
 
     def update_view(self, module_name: str) -> None:
+        """UK English: Standardised detail refresh."""
         self.update_detail_view(module_name)
         self.update_status_view(module_name)
         self.update_logs_view(module_name)
@@ -191,11 +206,22 @@ class DagheTUI(App):
         self.run_maintenance("upgrade")
 
     def run_maintenance(self, action_type: str) -> None:
+        """UK English: Hardened trigger with manifest validation."""
         list_view = self.query_one("#module-list", ListView)
+        status_label = self.query_one("#action-status", Label)
+
         if not list_view.highlighted_child or self.is_busy:
             return
 
         module_name = list_view.highlighted_child.module_name
+
+        # Item 3: Manifest-error action hardening
+        try:
+            load_module_manifest(JOBS_DIR, module_name)
+        except ManifestError:
+            status_label.update("[red]Error: Invalid manifest. Action blocked.[/red]")
+            return
+
         self.execute_worker(module_name, action_type)
 
     @work(thread=True)
@@ -267,11 +293,10 @@ class DagheTUI(App):
         finally:
             self.is_busy = False
             self.call_from_thread(status_label.remove_class, "busy")
-            # Fix 3: Ensure final message reflects actual outcome, not generic "finished"
             if final_msg:
                 self.call_from_thread(status_label.update, final_msg)
-            # Fix 4: Preserve post-completion refresh
-            self.call_from_thread(self.update_view, module_name)
+            # Item 2: Unified refresh logic on completion
+            self.call_from_thread(self.action_refresh_all)
 
 
 if __name__ == "__main__":
