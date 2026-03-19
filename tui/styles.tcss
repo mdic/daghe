@@ -1,0 +1,59 @@
+/* DaGhE TUI Stylesheet - UK English spelling */
+
+Screen {
+    background: #1a1b26;
+}
+
+#sidebar {
+    width: 35;
+    border-right: solid $primary;
+    background: #16161e;
+}
+
+#detail-area {
+    padding: 1 2;
+}
+
+.section-title {
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+}
+
+.placeholder {
+    color: #565f89;
+    text-style: italic;
+    margin: 1 0;
+}
+
+.mode-testing {
+    color: #e0af68;
+}
+
+.mode-production {
+    color: #9ece6a;
+}
+
+/* Status Panel Styling */
+#module-status {
+    background: $boost;
+    padding: 1 2;
+    margin: 1 0;
+    border: tall $background;
+    height: auto;
+}
+
+.status-success {
+    color: #9ece6a;
+    border: tall #9ece6a;
+}
+
+.status-failure {
+    color: #f7768e;
+    border: tall #f7768e;
+}
+
+.status-empty {
+    color: #565f89;
+    border: tall #565f89;
+}
