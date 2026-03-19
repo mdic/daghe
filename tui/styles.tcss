@@ -57,3 +57,24 @@ Screen {
     color: #565f89;
     border: tall #565f89;
 }
+
+/* Log Panel Styling */
+#module-logs {
+    background: #16161e;
+    color: #a9b1d6;
+    padding: 1 2;
+    margin: 1 0;
+    border: solid #3b4261;
+    height: auto;
+    min-height: 5;
+    max-height: 20;
+}
+
+#action-status {
+    background: #16161e;
+    color: #7aa2f7;
+    padding: 0 2;
+    margin: 1 0;
+    border: inner #3b4261;
+    width: 100%;
+}
