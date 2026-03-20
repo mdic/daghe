@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# DaGhE Telegram Notifier - Batch 4.1.c
-# UK English spelling. Final robust error-handling and simplified config.
+# DaGhE Telegram Notifier - Batch 4.1.d
+# UK English spelling. Clean separation of Transport and API/HTTP failures.
 set -euo pipefail
 
 # 1. Dynamic Path Discovery
@@ -21,7 +21,7 @@ else
     exit 0
 fi
 
-# 4. Load Templates (Simplified to one single file)
+# 4. Load Templates
 if [[ -f "${BASE_DIR}/config/telegram-templates.sh" ]]; then
     source "${BASE_DIR}/config/telegram-templates.sh"
 fi
@@ -39,24 +39,29 @@ PREFIX="${!VAR_NAME:-${DGH_NOTIFY_DEFAULT:-"[${LEVEL_UPPER}]"}}"
 # 7. Payload Construction
 PAYLOAD="${PREFIX} [${HOSTNAME}]"$'\n'"${MESSAGE}"
 
-# 8. Dispatch and API Failure Detection
-# Restructured to handle transport failure explicitly under set -e.
-# Placing the assignment in an 'if' condition prevents the script from
-# exiting immediately on curl error, allowing us to report it.
-if ! RESPONSE=$(curl -s -f -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+# 8. Dispatch and Failure Detection
+# -sS: Silent, but show transport errors to stderr
+# -w "\n%{http_code}": Append HTTP status code on a new line to the response body
+# We use 'if !' to handle curl exit codes (transport level) without triggering 'set -e'
+if ! RAW_RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "text=${PAYLOAD}"); then
-    echo "Telegram notification failed (Transport error)" >&2
+    -d "text=${PAYLOAD}" 2>&1); then
+    echo "Telegram notification failed (Transport error: $RAW_RESPONSE)" >&2
     exit 1
 fi
 
-# Transport succeeded, now check if the Telegram API returned "ok": true
-if [[ "$RESPONSE" != *'"ok":true'* ]]; then
-    echo "Telegram notification failed (API error: $RESPONSE)" >&2
+# Parse RAW_RESPONSE: last line is the HTTP code, the rest is the body
+HTTP_CODE=$(echo "$RAW_RESPONSE" | tail -n1)
+RESPONSE_BODY=$(echo "$RAW_RESPONSE" | sed '$d')
+
+# 9. HTTP/API Error Inspection
+# Check if HTTP status is 200 AND body contains '"ok":true'
+if [[ "$HTTP_CODE" -ne 200 ]] || [[ "$RESPONSE_BODY" != *'"ok":true'* ]]; then
+    echo "Telegram notification failed (API error, HTTP $HTTP_CODE: $RESPONSE_BODY)" >&2
     exit 1
 fi
 
-# 9. Optional Verbosity
+# 10. Optional Verbosity
 if [[ "${DGH_NOTIFY_VERBOSE:-0}" == "1" ]]; then
     echo "Notification dispatched: [${LEVEL_UPPER}]"
 fi

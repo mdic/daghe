@@ -289,24 +289,25 @@ class DagheOrchestrator:
         module_cwd = JOBS_DIR / name / "current"
         logger.info(f"Upgrading dependencies for {name}...")
 
-        # Timezone-aware UTC timestamps
         start_time = datetime.now(timezone.utc).isoformat()
-
-        # Capture success boolean from library
         success = upgrade_module_packages(module_cwd, packages)
-
         end_time = datetime.now(timezone.utc).isoformat()
 
         if success:
             outcome = "success"
             summary = f"Successfully upgraded {len(packages)} packages."
             exit_code = 0
+            # Integration: Notify on Success
+            send_notification("SUCCESS", f"Upgrade succeeded: {name}")
         else:
             outcome = "failure"
             summary = "One or more packages failed to upgrade."
             exit_code = 1
             logger.error(summary)
+            # Integration: Notify on Failure
+            send_notification("ERROR", f"Upgrade failed: {name}")
 
+        # State writing remains pure and independent
         state_payload = {
             "module": name,
             "last_run": {
