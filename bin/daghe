@@ -148,12 +148,14 @@ class DagheOrchestrator:
         start_time = datetime.now(timezone.utc).isoformat()
 
         try:
+            # We rely on the return code of the library helper
             res = sync_module_venv(module_cwd)
             success = res.returncode == 0
             exit_code = res.returncode
-        except Exception as e:
+        except OSError as e:
+            # Only catch OS-level execution failures (e.g. binary missing)
             success, exit_code = False, 1
-            logger.error(f"Sync execution error: {e}")
+            logger.error(f"Sync failed to execute: {e}")
 
         end_time = datetime.now(timezone.utc).isoformat()
         outcome = "success" if success else "failure"
@@ -311,6 +313,8 @@ class DagheOrchestrator:
         packages = data.get("updates", {}).get("auto_upgrade_packages", [])
 
         if not packages:
+            # UK English: Return quietly if no work is required (No-op)
+            logger.info(f"No packages defined for {name}. Skipping upgrade.")
             return
 
         module_cwd = JOBS_DIR / name / "current"
