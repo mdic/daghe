@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# DaGhE Telegram Notifier - Batch 4.1.b
-# UK English spelling. Robust error detection for both transport and API levels.
+# DaGhE Telegram Notifier - Batch 4.1.c
+# UK English spelling. Final robust error-handling and simplified config.
 set -euo pipefail
 
 # 1. Dynamic Path Discovery
@@ -21,10 +21,8 @@ else
     exit 0
 fi
 
-# 4. Load Templates (Optional defines prefixes per level)
-if [[ -f "${BASE_DIR}/config/telegram-templates-v2.sh" ]]; then
-    source "${BASE_DIR}/config/telegram-templates-v2.sh"
-elif [[ -f "${BASE_DIR}/config/telegram-templates.sh" ]]; then
+# 4. Load Templates (Simplified to one single file)
+if [[ -f "${BASE_DIR}/config/telegram-templates.sh" ]]; then
     source "${BASE_DIR}/config/telegram-templates.sh"
 fi
 
@@ -42,20 +40,17 @@ PREFIX="${!VAR_NAME:-${DGH_NOTIFY_DEFAULT:-"[${LEVEL_UPPER}]"}}"
 PAYLOAD="${PREFIX} [${HOSTNAME}]"$'\n'"${MESSAGE}"
 
 # 8. Dispatch and API Failure Detection
-# Capture response to check for API-level errors
-RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+# Restructured to handle transport failure explicitly under set -e.
+# Placing the assignment in an 'if' condition prevents the script from
+# exiting immediately on curl error, allowing us to report it.
+if ! RESPONSE=$(curl -s -f -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "text=${PAYLOAD}")
-CURL_STATUS=$?
-
-# Check for Transport failure (curl exit code)
-if [[ $CURL_STATUS -ne 0 ]]; then
-    echo "Telegram notification failed (Transport error: exit code $CURL_STATUS)" >&2
+    -d "text=${PAYLOAD}"); then
+    echo "Telegram notification failed (Transport error)" >&2
     exit 1
 fi
 
-# Check for Telegram API failure (JSON response "ok": false)
-# We use Bash string matching to avoid a 'jq' dependency
+# Transport succeeded, now check if the Telegram API returned "ok": true
 if [[ "$RESPONSE" != *'"ok":true'* ]]; then
     echo "Telegram notification failed (API error: $RESPONSE)" >&2
     exit 1
