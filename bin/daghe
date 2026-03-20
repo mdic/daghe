@@ -37,6 +37,7 @@ from core.modules import (
     get_testing_status_names,
     list_module_dirs,
 )
+from core.notifier import send_notification
 from core.state import write_state
 from core.system import (
     get_clean_env,
@@ -144,13 +145,39 @@ class DagheOrchestrator:
             return
 
         logger.info(f"Synchronising uv environment for {name}...")
+        start_time = datetime.now(timezone.utc).isoformat()
+
         try:
-            # Delegation to library; check_returncode ensures legacy exception-based flow
-            sync_module_venv(module_cwd).check_returncode()
-            logger.info(f"Environment for {name} synchronised successfully.")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to synchronise environment for {name}: {e}")
-            sys.exit(1)
+            res = sync_module_venv(module_cwd)
+            success = res.returncode == 0
+            exit_code = res.returncode
+        except Exception as e:
+            success, exit_code = False, 1
+            logger.error(f"Sync execution error: {e}")
+
+        end_time = datetime.now(timezone.utc).isoformat()
+        outcome = "success" if success else "failure"
+        summary = f"Environment sync {outcome}."
+
+        # Fix 1: Write State FIRST
+        state_payload = {
+            "module": name,
+            "last_run": {
+                "start": start_time,
+                "end": end_time,
+                "exit_code": exit_code,
+                "outcome": outcome,
+                "summary": summary,
+            },
+        }
+        write_state(STATE_DIR, name, state_payload)
+
+        # Notify SECOND
+        if not success:
+            send_notification("ERROR", f"Environment sync failed: {name}")
+        else:
+            # For sync, we notify success as INFO (less intrusive than maintenance)
+            send_notification("INFO", f"Environment sync completed: {name}")
 
     def generate_configs(self, module_name):
         """

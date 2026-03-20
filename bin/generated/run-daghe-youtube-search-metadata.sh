@@ -5,7 +5,7 @@ set -euo pipefail
 # 1. Environment Discovery and Initialisation
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export BASE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-export PATH="/home/deek/git_repos/daghe-refactor/.venv/bin:/home/deek/.volta/bin:/home/mdic/miniforge3/bin:/home/deek/.dprint/bin:/usr/local/bin:/home/mdic/.emacs.d/bin:/home/mdic/.config/emacs/bin:/home/deek/.volta/bin:/home/mdic/miniforge3/bin:/home/deek/.volta/bin:/home/deek/.volta/bin:/home/deek/.local/bin:/usr/bin:/bin"
+export PATH="/home/deek/git_repos/daghe-refactor/.venv/bin:/home/deek/git_repos/daghe-refactor/.venv/bin:/home/deek/.volta/bin:/home/mdic/miniforge3/bin:/home/deek/.dprint/bin:/usr/local/bin:/home/mdic/.emacs.d/bin:/home/mdic/.config/emacs/bin:/home/deek/.volta/bin:/home/mdic/miniforge3/bin:/home/deek/.volta/bin:/home/deek/.volta/bin:/home/deek/.local/bin:/usr/bin:/bin"
 
 NAME="daghe-youtube-search-metadata"
 PROXY_NAME=""
