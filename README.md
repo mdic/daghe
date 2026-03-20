@@ -15,7 +15,7 @@ DaGhE is an orchestration system for managing and monitoring automated data gath
 
 ## 2. Installation (Minimal)
 
-1.  **Prepare System**: Ensure `python3`, `uv`, `ffmpeg`, and `deno` are installed.
+1.  **Prepare System**: Ensure `python3` and `uv` are installed.
 2.  **Create User**:
     ```bash
     sudo useradd -m -d /opt/daghe -s /bin/bash daghe
