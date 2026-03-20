@@ -1,6 +1,6 @@
 # DaGhE: Data Gathering Environment
 
-DaGhE is a professional orchestration system for managing and monitoring automated jobs on a Linux server.
+DaGhE is an orchestration system for managing and monitoring automated data gathering jobs on a Linux server.
 
 ---
 
