@@ -1,162 +1,77 @@
 # DaGhE: Data Gathering Environment
 
-**DaGhE** is a production-grade orchestration platform for Linux VPS environments. It manages multiple Python and Bash jobs using a **Zero-Sudo** architecture. By leveraging **systemd user-instances**, DaGhE remains entirely confined to its own directory, requiring no root privileges for day-to-day operations.
-New modules can be added by following the [PROMPT_TEMPLATE.md](PROMPT_TEMPLATE.md) specification in case you wish to vibe code.
+DaGhE is a professional orchestration system for managing and monitoring automated jobs on a Linux server.
 
 ---
 
-## 🏗 Architectural Principles
+## 1. What you can do with DaGhE
 
-*   **Zero-Sudo**: Once the initial "linger" is set, the orchestrator operates without elevated privileges.
-*   **Location-Agnostic**: Automatically discovers `BASE_DIR` for local testing or VPS production.
-*   **Isolated Environments**: Every module manages its own dependencies via `uv`.
-*   **Decoupled Data**: Code (`current/`) and collected data (`data/`) live in separate repositories.
-
----
-
-## 🚀 Initial VPS Setup (As Root/Sudo)
-
-### 1. Create the DaGhE System User
-```bash
-sudo useradd -m -d /opt/daghe -s /bin/bash daghe
-sudo mkdir -p /opt/daghe
-sudo chown daghe:daghe /opt/daghe
-```
-
-### 2. Enable User Persistence (Linger)
-Ensures the `daghe` user-instance starts at boot and stays alive after logout.
-```bash
-sudo loginctl enable-linger daghe
-```
-
-### 3. Configure Multi-user Access (ACLs)
-To allow your personal admin account (e.g., `your_user`) to edit files in `/opt/daghe` without changing the primary owner, use **Access Control Lists**.
-
-```bash
-# Install the ACL utility
-sudo apt update && sudo apt install acl -y
-
-# Grant your user recursive rwx access to existing files
-sudo setfacl -R -m u:your_user:rwx /opt/daghe
-
-# Set default ACLs so NEW files inherit these permissions automatically
-sudo setfacl -Rd -m u:your_user:rwx /opt/daghe
-```
+*   **Automate Tasks**: Run and manage multiple jobs (modules) independently.
+*   **Monitor Health**: Use a real-time TUI dashboard to check the status of all modules.
+*   **Manage Environments**: Automatically handle Python dependencies and isolated environments.
+*   **Stay Informed**: Receive instant alerts via Telegram when tasks succeed or fail.
 
 ---
 
-## 📦 Deployment (As the `daghe` User)
+## 2. Installation (Minimal)
 
-### 1. Initialise the Orchestrator
-```bash
-sudo -u daghe -i
-cd /opt/daghe
-git clone <orchestration-repo-url> .
-
-uv sync
-chmod +x bin/daghe bin/telegram-notify.sh
-```
-
-### 2. Configure Secrets
-```bash
-cp config/telegram.env.example config/telegram.env
-# Edit with your Telegram BOT_TOKEN and CHAT_ID
-nano config/telegram.env
-chmod 600 config/*.env
-```
-
----
-
-## ⚙️ Module Management
-
-### Adding a New Module
-1.  **Clone Repositories**: Deploy code to `jobs/<module-name>/current` and data to `jobs/<module-name>/data`.
-2.  **Run Installation**:
+1.  **Prepare System**: Ensure `python3`, `uv`, `ffmpeg`, and `deno` are installed.
+2.  **Create User**:
     ```bash
-    uv run bin/daghe install <module-name>
+    sudo useradd -m -d /opt/daghe -s /bin/bash daghe
+    sudo loginctl enable-linger daghe
     ```
-
-### CLI Reference
-| Command | Action |
-| :--- | :--- |
-| `uv run bin/daghe install <name>` | Initialises venv and registers systemd user-timers. |
-| `uv run bin/daghe upgrade <name>` | Force-upgrades Python packages defined in the manifest. |
-| `uv run bin/daghe status` | Shows all active DaGhE timers and scheduled runs. |
+3.  **Deploy**: Clone the orchestration repository directly into `/opt/daghe` and ensure the `daghe` user owns the directory.
+4.  **Initialise**: Switch to the `daghe` user and run `uv sync`.
 
 ---
 
-## 🧪 Testing & Operation
+## 3. Basic Usage
 
-### 1. Local Development (Testing Mode)
-Running `bin/daghe` outside `/opt/daghe` triggers **TESTING MODE**. It generates files for inspection in local folders but does **not** modify systemd or the user session.
+Use the `dgh` CLI (the main DaGhE command-line tool) for day-to-day management:
 
-### 2. Manual Systemd Trigger (VPS)
-To trigger a job immediately bypassing the timer:
-```bash
-systemctl --user start auto-<module-name>.service
-# Monitor logs
-journalctl --user -u auto-<module-name>.service -f
-```
+*   **Check Status**: `uv run bin/dgh status`
+*   **Register Module**: `uv run bin/dgh install <module-name>`
+*   **Run Job Manually**: `uv run bin/dgh run <module-name>`
+*   **Update Dependencies**: `uv run bin/dgh upgrade <module-name>`
+*   **View Module Logs**: `uv run bin/dgh logs <module-name>`
 
 ---
 
-## ⚠️ Common Troubleshooting
+## 4. TUI Quick Guide
 
-### Bus Connection Issues
-If `systemctl --user` fails with `Failed to connect to bus`:
-1.  Ensure `loginctl enable-linger daghe` was executed.
-2.  The `daghe` CLI automatically injects `XDG_RUNTIME_DIR`. If running commands manually, ensure these variables are exported:
-    ```bash
-    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
-    ```
+The Terminal User Interface (TUI) provides a live overview of your automation suite.
 
-### Permission Issues
-If you experience issues after editing files from an external account, re-apply the ACLs:
-```bash
-sudo setfacl -R -m u:your_user:rwx /opt/daghe
-```
+*   **Launch**: `uv run python -m tui.app`
+*   **Sidebar**: Navigate through installed modules using the arrow keys.
+*   **Detail View**: View the configuration, last-run outcome, and recent logs for the selected module.
+*   **Refresh**: Press `R` to reload the state of all modules and indicators.
+*   **Quit**: Press `Q` to exit.
 
 ---
 
-## 📂 Directory Structure
-*   `bin/`: Orchestrator CLI and generated wrappers.
-*   `jobs/`: Individual modules (code and data repositories).
-*   `.config/systemd/user/`: Active systemd unit symlinks.
-*   `logs/`: Centralised operational logs.
-*   `templates/`: Blueprints for service/timer generation.
+## 5. Notifications (Telegram)
+
+DaGhE is configured to send critical maintenance and job updates to a Telegram channel.
+
+*   **Configuration**: Set your bot credentials in `config/telegram.env`.
+*   **Templates**: Customise alert prefixes and emojis in `config/telegram-templates.sh`.
+*   **Purpose**: Receive notifications for important system events such as task outcomes and maintenance operations.
 
 ---
 
-## 🔐 Private GitHub Repositories (SSH)
+## 6. Logs & Troubleshooting
 
-To allow DaGhE to push data to private GitHub repositories without manual intervention:
-
-### 1. Initialise SSH
-Run the following command as the `daghe` user:
-```bash
-uv run bin/daghe setup-ssh
-```
-
-### 2. Add the Key to GitHub
-Copy the public key output by the command above. On GitHub:
-*   **For the entire account**: Go to `Settings` -> `SSH and GPG keys` -> `New SSH key`.
-*   **For a specific repo (Recommended)**: Go to the repository `Settings` -> `Deploy keys` -> `Add deploy key`. Ensure you tick **"Allow write access"**.
-
-### 3. Use SSH URLs in Manifests
-Ensure your `daghe-module.yaml` uses the SSH format:
-`code_repo: git@github.com:username/repo.git`
-
-### 4. Verify the Connection
-```bash
-ssh -T git@github.com
-```
-*If successful, GitHub will welcome you by your username.*
-```
+*   **Application Logs**: Module output is stored in the `logs/` directory inside the DaGhE installation.
+*   **System Logs**: Use `journalctl --user` to inspect system-level execution logs if applicable.
+*   **Live View**: Use the `run` command via CLI to see immediate output in your terminal.
 
 ---
 
-## ⚖️ Standards
-*   **Language**: UK English spelling throughout.
-*   **Security**: Minimalist privilege model with Zero-Sudo operation.
-*   **Environment**: Full isolation via `uv`.
+## 7. Where to go next
+
+For advanced configuration and technical details, refer to the following documents:
+
+*   **Technical Architecture**: `docs/ARCHITECTURE.md`
+*   **AI Protocol & Development**: `docs/LLM_PLAYBOOK.md`
+*   **Future Roadmap**: `docs/ROADMAP.md`
